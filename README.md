@@ -16,18 +16,12 @@ venv\Scripts\activate          # Windows
 pip install -r requirements.txt
 ```
 
-### 3. Setup MySQL Database
-```bash
-mysql -u root -p
-```
-```sql
-CREATE DATABASE fitness_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-EXIT;
-```
+### 3. Setup Database
+Use a PostgreSQL database such as Neon for local development and deployment.
 
 ### 4. Configure Environment
 ```bash
-# .env file is already configured. Verify your MySQL password is correct.
+# .env file is already configured. Verify your DATABASE_URL is correct.
 ```
 
 ### 5. Run Database Migrations
@@ -103,6 +97,7 @@ backend/
 ## Tech Stack
 - **Framework:** Flask 3.0
 - **Database:** MySQL 8.0 + SQLAlchemy + Flask-Migrate
+- **Hosted Database:** Neon PostgreSQL supported via `DATABASE_URL`
 - **Auth:** JWT (Flask-JWT-Extended) + bcrypt
 - **AI:** Groq API (Llama 3 70B) — FREE
 - **PDF:** fpdf2 (pure Python)

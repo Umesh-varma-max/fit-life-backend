@@ -16,18 +16,35 @@ class Config:
 
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ECHO = False
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        "pool_pre_ping": True
+    }
 
-    # MySQL connection string
-    DB_HOST = os.getenv('DB_HOST', 'localhost')
-    DB_PORT = os.getenv('DB_PORT', '3306')
-    DB_NAME = os.getenv('DB_NAME', 'fitness_db')
-    DB_USER = os.getenv('DB_USER', 'root')
-    DB_PASSWORD = quote_plus(os.getenv('DB_PASSWORD', ''))
+    DATABASE_URL = os.getenv('DATABASE_URL', '').strip()
 
-    SQLALCHEMY_DATABASE_URI = (
-        f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-        "?charset=utf8mb4"
-    )
+    if DATABASE_URL:
+        # Neon/Render commonly provide a postgres-style URL.
+        SQLALCHEMY_DATABASE_URI = DATABASE_URL
+        if SQLALCHEMY_DATABASE_URI.startswith('postgres://'):
+            SQLALCHEMY_DATABASE_URI = SQLALCHEMY_DATABASE_URI.replace(
+                'postgres://', 'postgresql+psycopg://', 1
+            )
+        elif SQLALCHEMY_DATABASE_URI.startswith('postgresql://'):
+            SQLALCHEMY_DATABASE_URI = SQLALCHEMY_DATABASE_URI.replace(
+                'postgresql://', 'postgresql+psycopg://', 1
+            )
+    else:
+        # Backward-compatible fallback for local DB settings.
+        DB_DIALECT = os.getenv('DB_DIALECT', 'postgresql+psycopg')
+        DB_HOST = os.getenv('DB_HOST', 'localhost')
+        DB_PORT = os.getenv('DB_PORT', '5432')
+        DB_NAME = os.getenv('DB_NAME', 'fitness_db')
+        DB_USER = os.getenv('DB_USER', 'postgres')
+        DB_PASSWORD = quote_plus(os.getenv('DB_PASSWORD', ''))
+
+        SQLALCHEMY_DATABASE_URI = (
+            f"{DB_DIALECT}://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+        )
 
     GROQ_API_KEY = os.getenv('GROQ_API_KEY', '')
     FRONTEND_ORIGIN = os.getenv('FRONTEND_ORIGIN', 'http://localhost:3000')
