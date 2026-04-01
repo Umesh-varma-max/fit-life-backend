@@ -11,4 +11,5 @@ class ActivityLogSchema(Schema):
     water_ml     = fields.Int(load_default=0, validate=validate.Range(min=0))
     sleep_hours  = fields.Float(load_default=0.0)
     duration_min = fields.Int(load_default=0)
+    details      = fields.Dict(load_default=dict)
     log_date     = fields.Date(load_default=None)  # defaults to today if omitted

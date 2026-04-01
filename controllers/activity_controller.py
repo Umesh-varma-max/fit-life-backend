@@ -16,7 +16,8 @@ def log_activity(user_id: int, data: dict):
         calories_out=data.get('calories_out', 0),
         water_ml=data.get('water_ml', 0),
         sleep_hours=data.get('sleep_hours', 0),
-        duration_min=data.get('duration_min', 0)
+        duration_min=data.get('duration_min', 0),
+        details=data.get('details') or {}
     )
     db.session.add(log)
     db.session.commit()
@@ -24,7 +25,8 @@ def log_activity(user_id: int, data: dict):
     return jsonify({
         "status": "success",
         "message": "Activity logged",
-        "log_id": log.id
+        "log_id": log.id,
+        "log": log.to_dict()
     }), 201
 
 
@@ -53,5 +55,7 @@ def get_activity(user_id: int, log_date=None):
             "water_ml": water,
             "sleep_hours": round(sleep_hrs, 1)
         },
-        "logs": [l.to_dict() for l in logs]
+        "logs": [l.to_dict() for l in logs],
+        "meal_logs": [l.to_dict() for l in logs if l.log_type == 'meal'],
+        "workout_logs": [l.to_dict() for l in logs if l.log_type == 'workout']
     }), 200

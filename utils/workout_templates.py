@@ -10,6 +10,54 @@ GOAL_TO_WORKOUT_KEY = {
     'maintenance': 'mixed'
 }
 
+MUSCLE_GROUP_MAP = {
+    'Brisk Walk / Jog': 'cardio',
+    'Core Crunches': 'core',
+    'Cycling / Stationary Bike': 'cardio',
+    'Rest / Light Yoga': 'mobility',
+    'HIIT Circuit': 'full_body',
+    'Jumping Jacks': 'cardio',
+    'Swimming / Skipping': 'cardio',
+    'Long Walk / Hike': 'cardio',
+    'Rest & Recovery': 'recovery',
+    'Bench Press': 'chest',
+    'Dumbbell Curl': 'arms',
+    'Push-ups': 'chest',
+    'Squats': 'legs',
+    'Lunges': 'legs',
+    'Leg Press': 'legs',
+    'Rest / Stretching': 'mobility',
+    'Deadlifts': 'posterior_chain',
+    'Pull-ups': 'back',
+    'Barbell Rows': 'back',
+    'Shoulder Press': 'shoulders',
+    'Lateral Raise': 'shoulders',
+    'Tricep Dips': 'arms',
+    'Full Body Circuit': 'full_body',
+    '30min Cardio + Core': 'full_body',
+    'Upper Body Strength': 'upper_body',
+    'Rest or Yoga': 'mobility',
+    'HIIT 25min': 'full_body',
+    'Lower Body Strength': 'legs',
+    '45min Steady Cardio': 'cardio',
+    'Rest': 'recovery'
+}
+
+EXERCISE_DESCRIPTION_MAP = {
+    'cardio': 'Steady pace conditioning work to improve endurance and support calorie burn.',
+    'core': 'Core stability work focused on posture, bracing, and trunk strength.',
+    'mobility': 'Low-intensity mobility and flexibility work for recovery and joint health.',
+    'full_body': 'Full-body conditioning block to raise heart rate and train multiple muscle groups.',
+    'recovery': 'Recovery-focused session to restore energy and reduce soreness.',
+    'chest': 'Upper-body pressing work focused on chest strength and pushing power.',
+    'arms': 'Arm-focused accessory work for biceps and triceps development.',
+    'legs': 'Lower-body strength work focused on quads, glutes, and stability.',
+    'posterior_chain': 'Hip hinge and posterior-chain work for glutes, hamstrings, and lower back.',
+    'back': 'Pulling work to strengthen the upper back and lats.',
+    'shoulders': 'Shoulder-focused pressing and isolation work for upper-body stability.',
+    'upper_body': 'Upper-body strength work covering pressing and pulling patterns.'
+}
+
 BASE_WORKOUT_TEMPLATES = {
     'cardio': {
         'Mon': [
@@ -385,12 +433,20 @@ def enrich_exercise(exercise: dict) -> dict:
     posture_meta = POSTURE_LIBRARY.get(name, DEFAULT_POSTURE)
     estimated_duration = _estimate_duration_min(exercise)
     estimated_burn = _estimate_calories_burn(exercise, posture_meta)
+    muscle_group = exercise.get('muscle_group') or MUSCLE_GROUP_MAP.get(name, 'full_body')
+    duration_seconds = int(exercise.get('duration_seconds') or (estimated_duration * 60))
+    rest_seconds = int(exercise.get('rest_seconds') or max(20, min(90, duration_seconds // 3 if duration_seconds else 30)))
 
     return {
         'name': name,
         'duration_min': int(exercise.get('duration_min') or 0),
+        'duration_seconds': duration_seconds,
         'sets': int(exercise.get('sets') or 0),
         'reps': int(exercise.get('reps') or 0),
+        'rest_seconds': rest_seconds,
+        'muscle_group': muscle_group,
+        'animation_category': muscle_group,
+        'description': exercise.get('description') or EXERCISE_DESCRIPTION_MAP.get(muscle_group, 'Structured exercise block for the current goal.'),
         'posture': posture_meta['posture'],
         'posture_cues': posture_meta['posture_cues'],
         'estimated_duration_min': estimated_duration,
@@ -407,6 +463,7 @@ def build_workout_day(day: str, exercises: list, plan_name: str = None) -> dict:
     return {
         'day': day,
         'plan_name': plan_name or f'{day} Workout',
+        'focus_area': enriched_exercises[0]['muscle_group'].replace('_', ' ').title() if enriched_exercises else 'Recovery',
         'total_duration_min': total_duration,
         'total_estimated_calories_burn': total_burn,
         'exercises': enriched_exercises
