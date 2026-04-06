@@ -17,7 +17,6 @@ class ActivityLog(db.Model):
     water_ml     = db.Column(db.Integer, default=0)
     sleep_hours  = db.Column(db.Numeric(4, 2), default=0)
     duration_min = db.Column(db.Integer, default=0)
-    details      = db.Column(db.JSON)
     created_at   = db.Column(db.DateTime, default=datetime.utcnow)
 
     # Composite index for efficient date-based queries
@@ -35,7 +34,6 @@ class ActivityLog(db.Model):
             'water_ml':     self.water_ml,
             'sleep_hours':  float(self.sleep_hours) if self.sleep_hours else 0,
             'duration_min': self.duration_min,
-            'details':      self.details or {},
             'log_date':     str(self.log_date),
             'created_at':   self.created_at.isoformat() if self.created_at else None
         }
