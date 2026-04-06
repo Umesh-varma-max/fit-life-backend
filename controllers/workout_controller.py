@@ -30,12 +30,11 @@ def _plan_summary(enriched_plan: list) -> dict:
 
 def get_plan(user_id: int):
     """Return a custom plan if present, otherwise a goal-based weekly workout plan."""
-    plans = WorkoutPlan.query.filter_by(user_id=user_id).order_by(
-        db.case(
-            {'Mon': 1, 'Tue': 2, 'Wed': 3, 'Thu': 4, 'Fri': 5, 'Sat': 6, 'Sun': 7},
-            value=WorkoutPlan.day_of_week
-        )
-    ).all()
+    plans = WorkoutPlan.query.filter_by(user_id=user_id).all()
+    plans = sorted(
+        plans,
+        key=lambda item: DAY_ORDER.index(item.day_of_week) if item.day_of_week in DAY_ORDER else 99
+    )
 
     if plans:
         enriched_plan = _serialize_custom_plans(plans)

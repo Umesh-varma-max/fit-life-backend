@@ -39,18 +39,18 @@ def generate_recommendation(profile) -> dict:
     Rule-based engine.
     Takes a HealthProfile object, returns recommendation dict.
     """
-    bmi       = float(profile.bmi)
+    bmi       = float(profile.bmi) if profile.bmi is not None else None
     goal      = profile.fitness_goal
     food_pref = profile.food_habits
     daily_cal = profile.daily_calories
 
-    bmi_cat = get_bmi_category(bmi)
+    bmi_cat = get_bmi_category(bmi) if bmi is not None else 'Unknown'
 
     # Select diet and workout template keys based on goal + BMI
-    if goal == 'muscle_gain' or bmi < 18.5:
+    if goal == 'muscle_gain' or (bmi is not None and bmi < 18.5):
         diet_key    = 'high_protein'
         workout_key = 'strength'
-    elif goal == 'weight_loss' or bmi >= 25:
+    elif goal == 'weight_loss' or (bmi is not None and bmi >= 25):
         diet_key    = 'low_cal'
         workout_key = 'cardio'
     else:

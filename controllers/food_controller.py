@@ -154,19 +154,29 @@ def analyze_food_photo(file_storage, food_hint: str = None):
     carbs_g = float(ai_vision.get('carbs_g') or 0)
     fat_g = float(ai_vision.get('fat_g') or 0)
 
+    normalized_analysis = {
+        "food_name": ai_vision.get('food_name') or 'Unknown Meal',
+        "name": ai_vision.get('food_name') or 'Unknown Meal',
+        "serving_estimate": ai_vision.get('serving_estimate') or '1 serving',
+        "serving": ai_vision.get('serving_estimate') or '1 serving',
+        "estimated_calories": round(estimated_calories, 1),
+        "calories": round(estimated_calories, 1),
+        "protein_g": round(protein_g, 1),
+        "protein": round(protein_g, 1),
+        "carbs_g": round(carbs_g, 1),
+        "carbs": round(carbs_g, 1),
+        "fat_g": round(fat_g, 1),
+        "fats": round(fat_g, 1),
+        "confidence": ai_vision.get('confidence') or 'Estimated',
+        "notes": ai_vision.get('notes') or [],
+        "feedback": _build_food_feedback(estimated_calories, protein_g, 0),
+        "source": "ai_vision"
+    }
+
     return {
         "status": "success",
-        "analysis": {
-            "food_name": ai_vision.get('food_name') or 'Unknown Meal',
-            "serving_estimate": ai_vision.get('serving_estimate') or '1 serving',
-            "estimated_calories": round(estimated_calories, 1),
-            "protein_g": round(protein_g, 1),
-            "carbs_g": round(carbs_g, 1),
-            "fat_g": round(fat_g, 1),
-            "confidence": ai_vision.get('confidence') or 'Estimated',
-            "notes": ai_vision.get('notes') or [],
-            "feedback": _build_food_feedback(estimated_calories, protein_g, 0)
-        }
+        "analysis": normalized_analysis,
+        "food": normalized_analysis
     }, 200
 
 
