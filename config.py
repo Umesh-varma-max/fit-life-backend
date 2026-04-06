@@ -10,14 +10,6 @@ load_dotenv()
 class Config:
     """Base configuration — shared by all environments."""
 
-    @staticmethod
-    def _parse_origins(raw_value: str):
-        """Allow a single origin or a comma-separated list of origins."""
-        origins = [origin.strip() for origin in (raw_value or '').split(',') if origin.strip()]
-        if not origins:
-            return ['http://localhost:3000']
-        return origins if len(origins) > 1 else origins[0]
-
     SECRET_KEY = os.getenv('SECRET_KEY', 'dev-secret')
     JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'jwt-secret')
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=24)
@@ -55,7 +47,7 @@ class Config:
         )
 
     GROQ_API_KEY = os.getenv('GROQ_API_KEY', '')
-    FRONTEND_ORIGIN = _parse_origins.__func__(os.getenv('FRONTEND_ORIGIN', 'http://localhost:3000'))
+    FRONTEND_ORIGIN = os.getenv('FRONTEND_ORIGIN', 'http://localhost:3000')
 
 
 class DevelopmentConfig(Config):
