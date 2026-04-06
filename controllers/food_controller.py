@@ -1,10 +1,22 @@
 from datetime import date
+from pathlib import Path
 
 from flask import jsonify
 
 from extensions import db
 from models.activity_log import ActivityLog
 from models.food_item import FoodItem
+from utils.ai_structured import groq_json_vision
+
+MAX_IMAGE_SIZE_BYTES = 8 * 1024 * 1024
+ALLOWED_IMAGE_MIME_TYPES = {
+    'image/jpeg',
+    'image/jpg',
+    'image/png',
+    'image/webp',
+    'image/heic',
+    'image/heif'
+}
 
 
 def search_food(query: str):
@@ -67,6 +79,95 @@ def _build_food_feedback(calories: float, protein_g: float, fiber_g: float) -> s
     if calories <= 150:
         return "Light intake. This works well as a snack or small add-on meal."
     return "Balanced choice. It can fit well when matched to your daily calorie target."
+
+
+def _fallback_analysis(food_hint: str = '', filename: str = '') -> dict:
+    """Fallback to local nutrition data when AI vision is unavailable."""
+    hint = (food_hint or Path(filename or '').stem or '').replace('-', ' ').replace('_', ' ').strip()
+    food, matched_by = _find_food(food_name=hint) if hint else (None, None)
+
+    if food:
+        nutrients = _scaled_macros(food, 100)
+        return {
+            'food_name': food.name,
+            'serving_estimate': '100 g serving',
+            'estimated_calories': nutrients['calories'],
+            'protein_g': nutrients['protein_g'],
+            'carbs_g': nutrients['carbs_g'],
+            'fat_g': nutrients['fat_g'],
+            'confidence': 'Fallback',
+            'notes': [f'Estimated using local nutrition data ({matched_by}).']
+        }
+
+    display_name = hint.title() if hint else 'Unknown Meal'
+    return {
+        'food_name': display_name,
+        'serving_estimate': '1 serving',
+        'estimated_calories': 320,
+        'protein_g': 12,
+        'carbs_g': 34,
+        'fat_g': 14,
+        'confidence': 'Low',
+        'notes': ['Upload a clearer image or add a food hint for better estimates.']
+    }
+
+
+def analyze_food_photo(file_storage, food_hint: str = None):
+    """Analyze a real food photo using Groq vision and return nutrition JSON."""
+    if not file_storage:
+        return {"status": "error", "message": "A photo upload is required"}, 400
+
+    image_bytes = file_storage.read()
+    mime_type = (file_storage.mimetype or '').lower()
+
+    if not image_bytes:
+        return {"status": "error", "message": "Uploaded photo is empty"}, 400
+    if len(image_bytes) > MAX_IMAGE_SIZE_BYTES:
+        return {"status": "error", "message": "Image is too large. Please upload a file under 8 MB."}, 400
+    if mime_type not in ALLOWED_IMAGE_MIME_TYPES:
+        return {"status": "error", "message": "Unsupported image type. Please upload JPG, PNG, WEBP, or HEIC."}, 400
+
+    system_prompt = (
+        'You analyze food photos for the FitLife app. Return pure JSON only with this exact shape: '
+        '{"food_name": string, "serving_estimate": string, "estimated_calories": number, '
+        '"protein_g": number, "carbs_g": number, "fat_g": number, "confidence": string, '
+        '"notes": string[]}. Do not include markdown fences or extra explanation.'
+    )
+    user_prompt = (
+        'Identify the primary food item in this image and estimate a realistic serving size and macros. '
+        'If the image contains multiple foods, summarize the main plate total. '
+        f'Optional user hint: {(food_hint or "none").strip() or "none"}.'
+    )
+
+    try:
+        ai_vision = groq_json_vision(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            image_bytes=image_bytes,
+            mime_type=mime_type
+        )
+    except Exception:
+        ai_vision = _fallback_analysis(food_hint=food_hint, filename=file_storage.filename)
+
+    estimated_calories = float(ai_vision.get('estimated_calories') or 0)
+    protein_g = float(ai_vision.get('protein_g') or 0)
+    carbs_g = float(ai_vision.get('carbs_g') or 0)
+    fat_g = float(ai_vision.get('fat_g') or 0)
+
+    return {
+        "status": "success",
+        "analysis": {
+            "food_name": ai_vision.get('food_name') or 'Unknown Meal',
+            "serving_estimate": ai_vision.get('serving_estimate') or '1 serving',
+            "estimated_calories": round(estimated_calories, 1),
+            "protein_g": round(protein_g, 1),
+            "carbs_g": round(carbs_g, 1),
+            "fat_g": round(fat_g, 1),
+            "confidence": ai_vision.get('confidence') or 'Estimated',
+            "notes": ai_vision.get('notes') or [],
+            "feedback": _build_food_feedback(estimated_calories, protein_g, 0)
+        }
+    }, 200
 
 
 def scan_food(barcode: str = None, food_name: str = None, quantity_g=100, meal_time: str = None,

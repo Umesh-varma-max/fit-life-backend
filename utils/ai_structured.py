@@ -1,0 +1,75 @@
+"""
+Helpers for JSON-only Groq responses and graceful fallback parsing.
+"""
+
+import base64
+import json
+import os
+
+import requests
+
+
+GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+DEFAULT_VISION_MODEL = os.getenv("GROQ_VISION_MODEL", "llama-3.2-90b-vision-preview")
+
+
+def _strip_json_wrappers(raw_text: str) -> str:
+    """Strip markdown fences and surrounding whitespace from model output."""
+    text = (raw_text or "").strip()
+    if text.startswith("```"):
+        lines = text.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip().startswith("```"):
+            lines = lines[:-1]
+        text = "\n".join(lines).strip()
+
+    if "{" in text and "}" in text:
+        start = text.find("{")
+        end = text.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            text = text[start:end + 1]
+    return text
+
+
+def _parse_json_output(raw_text: str):
+    return json.loads(_strip_json_wrappers(raw_text))
+
+
+def groq_json_vision(system_prompt: str, user_prompt: str, image_bytes: bytes, mime_type: str):
+    """Send an image plus text prompt to Groq and parse JSON output."""
+    api_key = os.getenv("GROQ_API_KEY", "").strip()
+    if not api_key:
+        raise RuntimeError("Groq API key is not configured")
+
+    image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+    image_url = f"data:{mime_type};base64,{image_b64}"
+
+    payload = {
+        "model": DEFAULT_VISION_MODEL,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": user_prompt},
+                    {"type": "image_url", "image_url": {"url": image_url}}
+                ]
+            }
+        ],
+        "temperature": 0.2,
+        "response_format": {"type": "json_object"}
+    }
+
+    response = requests.post(
+        GROQ_API_URL,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        },
+        json=payload,
+        timeout=45
+    )
+    response.raise_for_status()
+    raw_text = response.json()["choices"][0]["message"]["content"]
+    return _parse_json_output(raw_text)
