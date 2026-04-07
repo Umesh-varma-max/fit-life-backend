@@ -83,8 +83,17 @@ def _build_food_feedback(calories: float, protein_g: float, fiber_g: float) -> s
 
 
 def _fallback_analysis(food_hint: str = '', filename: str = '') -> dict:
-    """Fallback to local nutrition data when AI vision is unavailable."""
-    hint = (food_hint or Path(filename or '').stem or '').replace('-', ' ').replace('_', ' ').strip()
+    """Fallback to local nutrition data only when there is a believable DB match."""
+    hint = (food_hint or '').replace('-', ' ').replace('_', ' ').strip()
+
+    if not hint:
+        stem = Path(filename or '').stem.replace('-', ' ').replace('_', ' ').strip()
+        cleaned_tokens = [
+            token for token in re.findall(r'[A-Za-z]{3,}', stem)
+            if token.lower() not in {'img', 'image', 'photo', 'scan', 'meal', 'capture', 'camera'}
+        ]
+        hint = ' '.join(cleaned_tokens[:4]).strip()
+
     food, matched_by = _find_food(food_name=hint) if hint else (None, None)
 
     if food:
@@ -100,17 +109,7 @@ def _fallback_analysis(food_hint: str = '', filename: str = '') -> dict:
             'notes': [f'Estimated using local nutrition data ({matched_by}).']
         }
 
-    display_name = hint.title() if hint else 'Unknown Meal'
-    return {
-        'food_name': display_name,
-        'serving_estimate': '1 serving',
-        'estimated_calories': 320,
-        'protein_g': 12,
-        'carbs_g': 34,
-        'fat_g': 14,
-        'confidence': 'Low',
-        'notes': ['Upload a clearer image or add a food hint for better estimates.']
-    }
+    return None
 
 
 def _extract_serving_grams(serving_estimate: str):
@@ -193,6 +192,15 @@ def analyze_food_photo(file_storage, food_hint: str = None):
         ai_vision = _enrich_analysis_with_food_db(ai_vision)
     except Exception:
         ai_vision = _fallback_analysis(food_hint=food_hint, filename=file_storage.filename)
+
+    if not ai_vision:
+        return {
+            "status": "error",
+            "message": (
+                "Could not confidently identify this food from the photo. "
+                "Try a clearer image, capture the package name, or add a food hint."
+            )
+        }, 422
 
     estimated_calories = float(ai_vision.get('estimated_calories') or 0)
     protein_g = float(ai_vision.get('protein_g') or 0)
