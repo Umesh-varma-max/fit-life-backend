@@ -35,7 +35,8 @@ def food_scan(current_user):
         quantity_g=data.get('quantity_g', 100),
         meal_time=data.get('meal_time'),
         should_log=bool(data.get('log_meal') or data.get('mark_as_eaten') or data.get('auto_log')),
-        log_date=data.get('log_date')
+        log_date=data.get('log_date'),
+        current_user=current_user
     )
     if status_code != 200:
         return jsonify(response_payload), status_code
@@ -51,6 +52,7 @@ def food_analyze_photo(current_user):
 
     response_payload, status_code = analyze_food_photo(
         photo,
-        food_hint=request.form.get('food_hint', '').strip()
+        food_hint=request.form.get('food_hint', '').strip(),
+        current_user=current_user
     )
     return jsonify(response_payload), status_code

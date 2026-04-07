@@ -93,6 +93,65 @@ def _build_food_feedback(calories: float, protein_g: float, fiber_g: float) -> s
     return "Balanced choice. It can fit well when matched to your daily calorie target."
 
 
+def _goal_display_label(goal: str) -> str:
+    return {
+        'weight_loss': 'weight loss',
+        'muscle_gain': 'muscle gain',
+        'maintenance': 'maintenance'
+    }.get(goal or '', 'your goal')
+
+
+def _build_goal_warning(calories: float, protein_g: float, carbs_g: float, fat_g: float, profile) -> dict:
+    """Return goal-aware warning guidance for the scanned food."""
+    if not profile:
+        return {
+            "should_warn": False,
+            "title": "",
+            "message": "",
+            "issues": [],
+            "goal": None
+        }
+
+    goal = getattr(profile, 'fitness_goal', None)
+    issues = []
+
+    if goal == 'weight_loss':
+        if calories >= 350:
+            issues.append("High calories for a single snack or small meal can slow a calorie deficit.")
+        if fat_g >= 18:
+            issues.append("Higher fat content can make this food more calorie-dense.")
+        if carbs_g >= 35 and protein_g < 12:
+            issues.append("High carbs with lower protein may leave you less full and make cutting harder.")
+    elif goal == 'muscle_gain':
+        if protein_g < 15:
+            issues.append("Protein is on the lower side for muscle-building support.")
+        if calories < 220:
+            issues.append("Calories may be too low to meaningfully support a surplus.")
+    elif goal == 'maintenance':
+        if calories >= 500:
+            issues.append("Very calorie-dense foods can push you above maintenance quickly.")
+        if protein_g < 10 and carbs_g >= 35:
+            issues.append("This is more energy-heavy than recovery-supportive.")
+
+    should_warn = bool(issues)
+    goal_label = _goal_display_label(goal)
+    if should_warn:
+        message = (
+            f"This food may not be the best fit for your {goal_label} goal. "
+            "Consume it carefully or choose a leaner alternative."
+        )
+    else:
+        message = f"This food generally fits your {goal_label} goal when portioned well."
+
+    return {
+        "should_warn": should_warn,
+        "title": "Diet warning" if should_warn else "Goal fit",
+        "message": message,
+        "issues": issues,
+        "goal": goal
+    }
+
+
 def _fallback_analysis(food_hint: str = '', filename: str = '') -> dict:
     """Fallback to local nutrition data only when there is a believable DB match."""
     hint = (food_hint or '').replace('-', ' ').replace('_', ' ').strip()
@@ -166,7 +225,7 @@ def _enrich_analysis_with_food_db(ai_vision: dict) -> dict:
     return ai_vision
 
 
-def analyze_food_photo(file_storage, food_hint: str = None):
+def analyze_food_photo(file_storage, food_hint: str = None, current_user=None):
     """Analyze a real food photo using Groq vision and return nutrition JSON."""
     if not file_storage:
         return {"status": "error", "message": "A photo upload is required"}, 400
@@ -242,6 +301,14 @@ def analyze_food_photo(file_storage, food_hint: str = None):
         "source": "ai_vision"
     }
 
+    normalized_analysis["diet_warning"] = _build_goal_warning(
+        calories=normalized_analysis["estimated_calories"],
+        protein_g=normalized_analysis["protein_g"],
+        carbs_g=normalized_analysis["carbs_g"],
+        fat_g=normalized_analysis["fat_g"],
+        profile=getattr(current_user, 'profile', None)
+    )
+
     return {
         "status": "success",
         "analysis": normalized_analysis,
@@ -250,7 +317,7 @@ def analyze_food_photo(file_storage, food_hint: str = None):
 
 
 def scan_food(barcode: str = None, food_name: str = None, quantity_g=100, meal_time: str = None,
-              should_log: bool = False, log_date: str = None):
+              should_log: bool = False, log_date: str = None, current_user=None):
     """
     Analyze a scanned food and optionally log it as a meal entry.
     Supports barcode scans and direct food-name matching.
@@ -283,7 +350,14 @@ def scan_food(barcode: str = None, food_name: str = None, quantity_g=100, meal_t
         'fat_g_for_quantity': nutrients['fat_g'],
         'fiber_g_for_quantity': nutrients['fiber_g'],
         'meal_time': meal_time or 'unspecified',
-        'feedback': feedback
+        'feedback': feedback,
+        'diet_warning': _build_goal_warning(
+            calories=nutrients['calories'],
+            protein_g=nutrients['protein_g'],
+            carbs_g=nutrients['carbs_g'],
+            fat_g=nutrients['fat_g'],
+            profile=getattr(current_user, 'profile', None)
+        )
     })
 
     response = {
