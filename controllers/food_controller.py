@@ -7,7 +7,7 @@ from flask import jsonify
 from extensions import db
 from models.activity_log import ActivityLog
 from models.food_item import FoodItem
-from utils.ai_structured import groq_json_vision
+from utils.ai_structured import gemini_json_vision, groq_json_vision
 
 MAX_IMAGE_SIZE_BYTES = 8 * 1024 * 1024
 ALLOWED_IMAGE_MIME_TYPES = {
@@ -18,6 +18,17 @@ ALLOWED_IMAGE_MIME_TYPES = {
     'image/heic',
     'image/heif'
 }
+VISION_SYSTEM_PROMPT = (
+    'Act as an advanced food recognition and nutrition estimation AI for the FitLife app. '
+    'Analyze the image and provide the most realistic, scientifically grounded nutrition values. '
+    'Identify the exact food item or branded packaged food when visible. '
+    'Estimate portion size from visual cues or packaging. '
+    'Use real-world nutrition knowledge and do not invent exaggerated protein values. '
+    'Return pure JSON only with this exact shape: '
+    '{"food_name": string, "serving_estimate": string, "estimated_calories": number, '
+    '"protein_g": number, "carbs_g": number, "fat_g": number, "confidence": string, '
+    '"notes": string[]}.'
+)
 
 
 def search_food(query: str):
@@ -170,28 +181,33 @@ def analyze_food_photo(file_storage, food_hint: str = None):
     if mime_type not in ALLOWED_IMAGE_MIME_TYPES:
         return {"status": "error", "message": "Unsupported image type. Please upload JPG, PNG, WEBP, or HEIC."}, 400
 
-    system_prompt = (
-        'You analyze food photos for the FitLife app. Return pure JSON only with this exact shape: '
-        '{"food_name": string, "serving_estimate": string, "estimated_calories": number, '
-        '"protein_g": number, "carbs_g": number, "fat_g": number, "confidence": string, '
-        '"notes": string[]}. Do not include markdown fences or extra explanation.'
-    )
     user_prompt = (
         'Identify the primary food item in this image and estimate a realistic serving size and macros. '
+        'If the image contains a branded package, read the visible product name and use that to infer realistic nutrition. '
         'If the image contains multiple foods, summarize the main plate total. '
         f'Optional user hint: {(food_hint or "none").strip() or "none"}.'
     )
 
     try:
-        ai_vision = groq_json_vision(
-            system_prompt=system_prompt,
+        ai_vision = gemini_json_vision(
+            system_prompt=VISION_SYSTEM_PROMPT,
             user_prompt=user_prompt,
             image_bytes=image_bytes,
             mime_type=mime_type
         )
-        ai_vision = _enrich_analysis_with_food_db(ai_vision)
     except Exception:
-        ai_vision = _fallback_analysis(food_hint=food_hint, filename=file_storage.filename)
+        try:
+            ai_vision = groq_json_vision(
+                system_prompt=VISION_SYSTEM_PROMPT,
+                user_prompt=user_prompt,
+                image_bytes=image_bytes,
+                mime_type=mime_type
+            )
+        except Exception:
+            ai_vision = _fallback_analysis(food_hint=food_hint, filename=file_storage.filename)
+
+    if ai_vision:
+        ai_vision = _enrich_analysis_with_food_db(ai_vision)
 
     if not ai_vision:
         return {

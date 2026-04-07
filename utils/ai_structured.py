@@ -11,6 +11,8 @@ import requests
 
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 DEFAULT_VISION_MODEL = os.getenv("GROQ_VISION_MODEL", "llama-3.2-90b-vision-preview")
+GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models"
+DEFAULT_GEMINI_VISION_MODEL = os.getenv("GEMINI_VISION_MODEL", "gemini-2.5-flash")
 
 
 def _strip_json_wrappers(raw_text: str) -> str:
@@ -54,6 +56,24 @@ def _post_chat_completion(payload: dict):
     return response.json()
 
 
+def _post_gemini_generate_content(model: str, payload: dict):
+    api_key = os.getenv("GEMINI_API_KEY", "").strip()
+    if not api_key:
+        raise RuntimeError("Gemini API key is not configured")
+
+    response = requests.post(
+        f"{GEMINI_API_URL}/{model}:generateContent",
+        headers={
+            "x-goog-api-key": api_key,
+            "Content-Type": "application/json"
+        },
+        json=payload,
+        timeout=45
+    )
+    response.raise_for_status()
+    return response.json()
+
+
 def groq_json_vision(system_prompt: str, user_prompt: str, image_bytes: bytes, mime_type: str):
     """Send an image plus text prompt to Groq and parse JSON output."""
     image_b64 = base64.b64encode(image_bytes).decode("utf-8")
@@ -85,3 +105,39 @@ def groq_json_vision(system_prompt: str, user_prompt: str, image_bytes: bytes, m
         )
         raw_text = _post_chat_completion(payload)["choices"][0]["message"]["content"]
         return _parse_json_output(raw_text)
+
+
+def gemini_json_vision(system_prompt: str, user_prompt: str, image_bytes: bytes, mime_type: str):
+    """Send an image plus text prompt to Gemini and parse JSON output."""
+    image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+
+    payload = {
+        "systemInstruction": {
+            "parts": [
+                {"text": system_prompt}
+            ]
+        },
+        "contents": [
+            {
+                "parts": [
+                    {
+                        "inline_data": {
+                            "mime_type": mime_type,
+                            "data": image_b64
+                        }
+                    },
+                    {
+                        "text": user_prompt
+                    }
+                ]
+            }
+        ],
+        "generationConfig": {
+            "temperature": 0.2,
+            "responseMimeType": "application/json"
+        }
+    }
+
+    response_json = _post_gemini_generate_content(DEFAULT_GEMINI_VISION_MODEL, payload)
+    raw_text = response_json["candidates"][0]["content"]["parts"][0]["text"]
+    return _parse_json_output(raw_text)
