@@ -9,12 +9,31 @@ from utils.bmi_calculator import (
 from utils.recommendation_engine import generate_recommendation
 
 
+GOAL_DISPLAY_LABELS = {
+    'weight_loss': 'Lose Weight',
+    'muscle_gain': 'Building Muscles',
+    'maintenance': 'Get Fitter'
+}
+
+ACTIVITY_DISPLAY_LABELS = {
+    'sedentary': 'Beginner',
+    'light': 'Beginner',
+    'moderate': 'Intermediate',
+    'active': 'Advanced'
+}
+
+
 def get_profile(user_id: int):
     """Return user's health profile."""
     profile = HealthProfile.query.filter_by(user_id=user_id).first()
     if not profile:
         return jsonify({"status": "error", "message": "Profile not found"}), 404
-    return jsonify({"status": "success", "profile": profile.to_dict()}), 200
+
+    profile_payload = profile.to_dict()
+    profile_payload['goal_label'] = GOAL_DISPLAY_LABELS.get(profile.fitness_goal, 'Get Fitter')
+    profile_payload['activity_label'] = ACTIVITY_DISPLAY_LABELS.get(profile.activity_level, 'Beginner')
+
+    return jsonify({"status": "success", "profile": profile_payload}), 200
 
 
 def save_profile(user_id: int, data: dict):
@@ -55,7 +74,9 @@ def save_profile(user_id: int, data: dict):
         "message": "Profile saved",
         "bmi": bmi,
         "bmr": bmr,
-        "daily_calories": cal
+        "daily_calories": cal,
+        "goal_label": GOAL_DISPLAY_LABELS.get(data['fitness_goal'], 'Get Fitter'),
+        "activity_label": ACTIVITY_DISPLAY_LABELS.get(data['activity_level'], 'Beginner')
     }), 200
 
 
