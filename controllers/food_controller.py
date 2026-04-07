@@ -1,5 +1,6 @@
 from datetime import date
 from pathlib import Path
+import re
 
 from flask import jsonify
 
@@ -112,6 +113,49 @@ def _fallback_analysis(food_hint: str = '', filename: str = '') -> dict:
     }
 
 
+def _extract_serving_grams(serving_estimate: str):
+    """Try to extract gram quantity from strings like '150 g serving'."""
+    if not serving_estimate:
+        return None
+
+    match = re.search(r'(\d+(?:\.\d+)?)\s*g\b', serving_estimate.lower())
+    if not match:
+        return None
+
+    try:
+        grams = float(match.group(1))
+    except ValueError:
+        return None
+    return grams if grams > 0 else None
+
+
+def _enrich_analysis_with_food_db(ai_vision: dict) -> dict:
+    """Blend AI vision output with local DB nutrition when a close match exists."""
+    food_name = (ai_vision.get('food_name') or '').strip()
+    if not food_name:
+        return ai_vision
+
+    food, matched_by = _find_food(food_name=food_name)
+    if not food:
+        return ai_vision
+
+    grams = _extract_serving_grams(ai_vision.get('serving_estimate'))
+    notes = list(ai_vision.get('notes') or [])
+
+    if grams:
+        nutrients = _scaled_macros(food, grams)
+        ai_vision['estimated_calories'] = nutrients['calories']
+        ai_vision['protein_g'] = nutrients['protein_g']
+        ai_vision['carbs_g'] = nutrients['carbs_g']
+        ai_vision['fat_g'] = nutrients['fat_g']
+        notes.append(f'Nutrition refined using FitLife food database ({matched_by}).')
+    else:
+        notes.append(f'Closest FitLife food match found: {food.name}.')
+
+    ai_vision['notes'] = notes
+    return ai_vision
+
+
 def analyze_food_photo(file_storage, food_hint: str = None):
     """Analyze a real food photo using Groq vision and return nutrition JSON."""
     if not file_storage:
@@ -146,6 +190,7 @@ def analyze_food_photo(file_storage, food_hint: str = None):
             image_bytes=image_bytes,
             mime_type=mime_type
         )
+        ai_vision = _enrich_analysis_with_food_db(ai_vision)
     except Exception:
         ai_vision = _fallback_analysis(food_hint=food_hint, filename=file_storage.filename)
 

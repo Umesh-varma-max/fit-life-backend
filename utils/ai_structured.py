@@ -36,12 +36,26 @@ def _parse_json_output(raw_text: str):
     return json.loads(_strip_json_wrappers(raw_text))
 
 
-def groq_json_vision(system_prompt: str, user_prompt: str, image_bytes: bytes, mime_type: str):
-    """Send an image plus text prompt to Groq and parse JSON output."""
+def _post_chat_completion(payload: dict):
     api_key = os.getenv("GROQ_API_KEY", "").strip()
     if not api_key:
         raise RuntimeError("Groq API key is not configured")
 
+    response = requests.post(
+        GROQ_API_URL,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        },
+        json=payload,
+        timeout=45
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def groq_json_vision(system_prompt: str, user_prompt: str, image_bytes: bytes, mime_type: str):
+    """Send an image plus text prompt to Groq and parse JSON output."""
     image_b64 = base64.b64encode(image_bytes).decode("utf-8")
     image_url = f"data:{mime_type};base64,{image_b64}"
 
@@ -61,15 +75,13 @@ def groq_json_vision(system_prompt: str, user_prompt: str, image_bytes: bytes, m
         "response_format": {"type": "json_object"}
     }
 
-    response = requests.post(
-        GROQ_API_URL,
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        },
-        json=payload,
-        timeout=45
-    )
-    response.raise_for_status()
-    raw_text = response.json()["choices"][0]["message"]["content"]
-    return _parse_json_output(raw_text)
+    try:
+        raw_text = _post_chat_completion(payload)["choices"][0]["message"]["content"]
+        return _parse_json_output(raw_text)
+    except Exception:
+        payload.pop("response_format", None)
+        payload["messages"][1]["content"][0]["text"] = (
+            f"{user_prompt}\n\nReturn pure JSON only. No markdown fences."
+        )
+        raw_text = _post_chat_completion(payload)["choices"][0]["message"]["content"]
+        return _parse_json_output(raw_text)

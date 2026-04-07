@@ -60,8 +60,20 @@ def generate_recommendation(profile) -> dict:
     # Food preference fallback: use 'non-veg' if preference not in template
     food_key = food_pref if food_pref in DIET_TEMPLATES[diet_key] else 'non-veg'
 
-    diet_plan    = DIET_TEMPLATES[diet_key][food_key]
-    workout_plan = build_goal_based_workout_plan(goal)
+    diet_plan = DIET_TEMPLATES[diet_key][food_key]
+    workout_plan_details = build_goal_based_workout_plan(goal)
+    workout_plan = {
+        day['day']: [
+            {
+                'name': exercise.get('name'),
+                'sets': exercise.get('sets', 0),
+                'reps': exercise.get('reps', 0),
+                'duration_min': exercise.get('estimated_duration_min') or exercise.get('duration_min', 0)
+            }
+            for exercise in day.get('exercises', [])
+        ]
+        for day in workout_plan_details.get('days', [])
+    }
     tips         = WEEKLY_TIPS.get(goal, WEEKLY_TIPS['maintenance'])
 
     return {
