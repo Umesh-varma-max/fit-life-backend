@@ -68,44 +68,23 @@ def _load_records_from_url(url: str, api_key: str | None = None):
     return payload if isinstance(payload, list) else payload.get('data', [])
 
 
-def _load_records_from_rapidapi(url: str, api_key: str, host: str):
-    headers = {
-        'Content-Type': 'application/json',
-        'X-RapidAPI-Key': api_key,
-        'X-RapidAPI-Host': host
-    }
-    response = requests.get(url, headers=headers, timeout=120)
-    response.raise_for_status()
-    payload = response.json()
-    return payload if isinstance(payload, list) else payload.get('data', payload.get('results', []))
-
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Import ExerciseDB-style exercise records into FitLife.')
     parser.add_argument('--json-path', help='Path to a local ExerciseDB JSON export.')
     parser.add_argument('--url', help='HTTP endpoint that returns a JSON exercise array.')
     parser.add_argument('--api-key', help='Optional bearer token for the HTTP endpoint.')
-    parser.add_argument('--rapidapi-key', help='RapidAPI key for ExerciseDB-style endpoints.')
-    parser.add_argument('--rapidapi-host', help='RapidAPI host header value.')
     parser.add_argument('--clear', action='store_true', help='Delete existing exercise records before import.')
     args = parser.parse_args()
 
     if not args.json_path and not args.url:
         parser.error('Provide either --json-path or --url')
-    if args.rapidapi_key and not args.rapidapi_host:
-        parser.error('Provide --rapidapi-host with --rapidapi-key')
 
     app = create_app()
     with app.app_context():
         if args.clear:
             ExerciseLibrary.query.delete()
 
-        if args.json_path:
-            records = _load_records_from_file(Path(args.json_path))
-        elif args.rapidapi_key:
-            records = _load_records_from_rapidapi(args.url, args.rapidapi_key, args.rapidapi_host)
-        else:
-            records = _load_records_from_url(args.url, args.api_key)
+        records = _load_records_from_file(Path(args.json_path)) if args.json_path else _load_records_from_url(args.url, args.api_key)
         imported = 0
         for record in records:
             if _upsert_exercise(record):
