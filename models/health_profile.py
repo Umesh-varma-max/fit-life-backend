@@ -18,8 +18,6 @@ class HealthProfile(db.Model):
     food_habits    = db.Column(db.Enum('veg', 'non-veg', 'vegan', 'keto', 'paleo', name='food_type'), default='non-veg')
     fitness_goal   = db.Column(db.Enum('weight_loss', 'muscle_gain', 'maintenance', name='goal_type'), nullable=False)
     bmi            = db.Column(db.Numeric(5, 2))
-    body_fat_percentage = db.Column(db.Numeric(5, 2))
-    body_fat_category   = db.Column(db.String(50))
     bmr            = db.Column(db.Numeric(8, 2))
     daily_calories = db.Column(db.Integer)
     created_at     = db.Column(db.DateTime, default=datetime.utcnow)
@@ -38,8 +36,6 @@ class HealthProfile(db.Model):
             'food_habits':    self.food_habits,
             'fitness_goal':   self.fitness_goal,
             'bmi':            float(self.bmi) if self.bmi else None,
-            'body_fat_percentage': float(self.body_fat_percentage) if self.body_fat_percentage else None,
-            'body_fat_category': self.body_fat_category,
             'bmr':            float(self.bmr) if self.bmr else None,
             'daily_calories': self.daily_calories
         }

@@ -35,40 +35,6 @@ def get_bmi_category(bmi: float) -> str:
     return 'Obese'
 
 
-def calculate_body_fat_percentage(bmi: float, age: int, gender: str) -> float:
-    """Estimate body fat percentage using the Deurenberg formula."""
-    gender_factor = 1.0 if gender == 'male' else 0.0 if gender == 'female' else 0.5
-    body_fat = (1.20 * bmi) + (0.23 * age) - (10.8 * gender_factor) - 5.4
-    return round(max(3.0, body_fat), 2)
-
-
-def get_body_fat_category(body_fat_percentage: float, gender: str) -> str:
-    """Return a simplified body-fat category aligned with the imported BFP dataset labels."""
-    if gender == 'male':
-        if body_fat_percentage < 14:
-            return 'Athletes'
-        if body_fat_percentage < 18:
-            return 'Fitness'
-        if body_fat_percentage < 25:
-            return 'Acceptable'
-        return 'Obese'
-
-    if gender == 'female':
-        if body_fat_percentage < 21:
-            return 'Athletes'
-        if body_fat_percentage < 25:
-            return 'Fitness'
-        if body_fat_percentage < 32:
-            return 'Acceptable'
-        return 'Obese'
-
-    if body_fat_percentage < 18:
-        return 'Fitness'
-    if body_fat_percentage < 28:
-        return 'Acceptable'
-    return 'Obese'
-
-
 def calculate_bmr(weight_kg: float, height_cm: float, age: int, gender: str) -> float:
     """
     Mifflin-St Jeor Equation.

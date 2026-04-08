@@ -7,7 +7,7 @@ BMI, fitness goal, and food preference.
 
 from utils.bmi_calculator import get_bmi_category
 from utils.diet_templates import DIET_TEMPLATES
-from utils.workout_library_engine import generate_personalized_workout_plan
+from utils.workout_templates import build_goal_based_workout_plan
 
 WEEKLY_TIPS = {
     'weight_loss': [
@@ -61,17 +61,14 @@ def generate_recommendation(profile) -> dict:
     food_key = food_pref if food_pref in DIET_TEMPLATES[diet_key] else 'non-veg'
 
     diet_plan = DIET_TEMPLATES[diet_key][food_key]
-    workout_plan_details = generate_personalized_workout_plan(profile)
+    workout_plan_details = build_goal_based_workout_plan(goal)
     workout_plan = {
         day['day']: [
             {
                 'name': exercise.get('name'),
                 'sets': exercise.get('sets', 0),
                 'reps': exercise.get('reps', 0),
-                'duration_min': exercise.get('estimated_duration_min') or exercise.get('duration_min', 0),
-                'duration_seconds': exercise.get('duration_seconds', 0),
-                'rest_seconds': exercise.get('rest_seconds', 0),
-                'demo_media_url': exercise.get('demo_media_url')
+                'duration_min': exercise.get('estimated_duration_min') or exercise.get('duration_min', 0)
             }
             for exercise in day.get('exercises', [])
         ]
