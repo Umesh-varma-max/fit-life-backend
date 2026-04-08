@@ -2,7 +2,7 @@ from datetime import date
 from pathlib import Path
 import re
 
-from flask import jsonify
+from flask import current_app, has_app_context, jsonify
 
 from extensions import db
 from models.activity_log import ActivityLog
@@ -20,10 +20,13 @@ ALLOWED_IMAGE_MIME_TYPES = {
 }
 VISION_SYSTEM_PROMPT = (
     'Act as an advanced food recognition and nutrition estimation AI for the FitLife app. '
-    'Analyze the image and provide the most realistic, scientifically grounded nutrition values. '
-    'Identify the exact food item or branded packaged food when visible. '
-    'Estimate portion size from visual cues or packaging. '
-    'Use real-world nutrition knowledge and do not invent exaggerated protein values. '
+    'Analyze the food image and provide the most realistic, scientifically grounded nutrition values possible. '
+    'Identify the food as specifically as you can. If it is a branded packaged food, read the visible brand or product name '
+    'and infer realistic nutrition for a typical single serving of that product. '
+    'Estimate portion size from packaging, hand size, number of pieces, or plate size. '
+    'Use real-world nutrition knowledge and keep calories and macros realistic for the detected food type. '
+    'Do not exaggerate protein. Sweet snacks should usually be carb/sugar heavy and protein-light. '
+    'If you are uncertain, lower the confidence and explain the uncertainty in notes. '
     'Return pure JSON only with this exact shape: '
     '{"food_name": string, "serving_estimate": string, "estimated_calories": number, '
     '"protein_g": number, "carbs_g": number, "fat_g": number, "confidence": string, '
@@ -227,6 +230,10 @@ def _enrich_analysis_with_food_db(ai_vision: dict) -> dict:
 
 def analyze_food_photo(file_storage, food_hint: str = None, current_user=None):
     """Analyze a real food photo using Groq vision and return nutrition JSON."""
+    def _log_warning(message: str, error_text: str):
+        if has_app_context():
+            current_app.logger.warning("%s: %s", message, error_text)
+
     if not file_storage:
         return {"status": "error", "message": "A photo upload is required"}, 400
 
@@ -241,11 +248,17 @@ def analyze_food_photo(file_storage, food_hint: str = None, current_user=None):
         return {"status": "error", "message": "Unsupported image type. Please upload JPG, PNG, WEBP, or HEIC."}, 400
 
     user_prompt = (
-        'Identify the primary food item in this image and estimate a realistic serving size and macros. '
-        'If the image contains a branded package, read the visible product name and use that to infer realistic nutrition. '
-        'If the image contains multiple foods, summarize the main plate total. '
+        'Identify the primary food item in this image and estimate a realistic serving size and nutrition. '
+        'If the image contains a branded package, read the visible product name and use it to infer realistic nutrition. '
+        'If the image contains multiple foods, summarize the main plate total rather than a single ingredient. '
+        'Prefer exact food names over generic labels like "meal" or "snack". '
         f'Optional user hint: {(food_hint or "none").strip() or "none"}.'
     )
+
+    provider_source = None
+    provider_notes = []
+    gemini_error = None
+    groq_error = None
 
     try:
         ai_vision = gemini_json_vision(
@@ -254,7 +267,11 @@ def analyze_food_photo(file_storage, food_hint: str = None, current_user=None):
             image_bytes=image_bytes,
             mime_type=mime_type
         )
-    except Exception:
+        provider_source = 'gemini_vision'
+    except Exception as exc:
+        gemini_error = str(exc)
+        _log_warning("Food scan Gemini failure", gemini_error)
+        provider_notes.append('Gemini vision unavailable for this scan.')
         try:
             ai_vision = groq_json_vision(
                 system_prompt=VISION_SYSTEM_PROMPT,
@@ -262,19 +279,38 @@ def analyze_food_photo(file_storage, food_hint: str = None, current_user=None):
                 image_bytes=image_bytes,
                 mime_type=mime_type
             )
-        except Exception:
+            provider_source = 'groq_vision'
+        except Exception as exc:
+            groq_error = str(exc)
+            _log_warning("Food scan Groq failure", groq_error)
             ai_vision = _fallback_analysis(food_hint=food_hint, filename=file_storage.filename)
+            if ai_vision:
+                provider_source = 'db_fallback'
+            else:
+                provider_source = 'unresolved'
+            provider_notes.append('Groq vision unavailable for this scan.')
 
     if ai_vision:
         ai_vision = _enrich_analysis_with_food_db(ai_vision)
 
     if not ai_vision:
+        provider_error = None
+        if gemini_error and 'API_KEY_INVALID' in gemini_error:
+            provider_error = 'Gemini API key is invalid. Update GEMINI_API_KEY and redeploy.'
+        elif gemini_error and 'Gemini API key is not configured' in gemini_error:
+            provider_error = 'Gemini API key is not configured.'
+        elif groq_error and 'Groq API key is not configured' in groq_error:
+            provider_error = 'Groq API key is not configured.'
+
         return {
             "status": "error",
             "message": (
                 "Could not confidently identify this food from the photo. "
                 "Try a clearer image, capture the package name, or add a food hint."
-            )
+            ),
+            "source": provider_source,
+            "provider_error": provider_error,
+            "provider_notes": provider_notes
         }, 422
 
     estimated_calories = float(ai_vision.get('estimated_calories') or 0)
@@ -296,9 +332,9 @@ def analyze_food_photo(file_storage, food_hint: str = None, current_user=None):
         "fat_g": round(fat_g, 1),
         "fats": round(fat_g, 1),
         "confidence": ai_vision.get('confidence') or 'Estimated',
-        "notes": ai_vision.get('notes') or [],
+        "notes": (ai_vision.get('notes') or []) + provider_notes,
         "feedback": _build_food_feedback(estimated_calories, protein_g, 0),
-        "source": "ai_vision"
+        "source": provider_source or "ai_vision"
     }
 
     normalized_analysis["diet_warning"] = _build_goal_warning(

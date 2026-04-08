@@ -1,5 +1,5 @@
 """
-Helpers for JSON-only Groq responses and graceful fallback parsing.
+Helpers for JSON-only Gemini/Groq responses and graceful fallback parsing.
 """
 
 import base64
@@ -52,7 +52,9 @@ def _post_chat_completion(payload: dict):
         json=payload,
         timeout=45
     )
-    response.raise_for_status()
+    if not response.ok:
+        detail = response.text[:500]
+        raise RuntimeError(f"Groq request failed ({response.status_code}): {detail}")
     return response.json()
 
 
@@ -70,7 +72,9 @@ def _post_gemini_generate_content(model: str, payload: dict):
         json=payload,
         timeout=45
     )
-    response.raise_for_status()
+    if not response.ok:
+        detail = response.text[:500]
+        raise RuntimeError(f"Gemini request failed ({response.status_code}): {detail}")
     return response.json()
 
 
@@ -121,8 +125,8 @@ def gemini_json_vision(system_prompt: str, user_prompt: str, image_bytes: bytes,
             {
                 "parts": [
                     {
-                        "inline_data": {
-                            "mime_type": mime_type,
+                        "inlineData": {
+                            "mimeType": mime_type,
                             "data": image_b64
                         }
                     },
