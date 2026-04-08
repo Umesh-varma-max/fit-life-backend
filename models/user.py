@@ -12,8 +12,6 @@ class User(db.Model):
     email         = db.Column(db.String(150), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
     role          = db.Column(db.Enum('user', 'admin', name='user_role'), default='user')
-    token_version = db.Column(db.Integer, default=0, nullable=False)
-    last_login_at = db.Column(db.DateTime, nullable=True)
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at    = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -31,7 +29,5 @@ class User(db.Model):
             'full_name':  self.full_name,
             'email':      self.email,
             'role':       self.role,
-            'token_version': self.token_version,
-            'last_login_at': self.last_login_at.isoformat() if self.last_login_at else None,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
