@@ -247,6 +247,9 @@ def analyze_food_photo(file_storage, food_hint: str = None, current_user=None):
         f'Optional user hint: {(food_hint or "none").strip() or "none"}.'
     )
 
+    provider_source = None
+    provider_notes = []
+
     try:
         ai_vision = gemini_json_vision(
             system_prompt=VISION_SYSTEM_PROMPT,
@@ -254,7 +257,9 @@ def analyze_food_photo(file_storage, food_hint: str = None, current_user=None):
             image_bytes=image_bytes,
             mime_type=mime_type
         )
+        provider_source = 'gemini_vision'
     except Exception:
+        provider_notes.append('Gemini vision unavailable for this scan.')
         try:
             ai_vision = groq_json_vision(
                 system_prompt=VISION_SYSTEM_PROMPT,
@@ -262,8 +267,14 @@ def analyze_food_photo(file_storage, food_hint: str = None, current_user=None):
                 image_bytes=image_bytes,
                 mime_type=mime_type
             )
+            provider_source = 'groq_vision'
         except Exception:
             ai_vision = _fallback_analysis(food_hint=food_hint, filename=file_storage.filename)
+            if ai_vision:
+                provider_source = 'db_fallback'
+            else:
+                provider_source = 'unresolved'
+            provider_notes.append('Groq vision unavailable for this scan.')
 
     if ai_vision:
         ai_vision = _enrich_analysis_with_food_db(ai_vision)
@@ -296,9 +307,9 @@ def analyze_food_photo(file_storage, food_hint: str = None, current_user=None):
         "fat_g": round(fat_g, 1),
         "fats": round(fat_g, 1),
         "confidence": ai_vision.get('confidence') or 'Estimated',
-        "notes": ai_vision.get('notes') or [],
+        "notes": (ai_vision.get('notes') or []) + provider_notes,
         "feedback": _build_food_feedback(estimated_calories, protein_g, 0),
-        "source": "ai_vision"
+        "source": provider_source or "ai_vision"
     }
 
     normalized_analysis["diet_warning"] = _build_goal_warning(
