@@ -52,7 +52,9 @@ def _post_chat_completion(payload: dict):
         json=payload,
         timeout=45
     )
-    response.raise_for_status()
+    if not response.ok:
+        detail = response.text[:500]
+        raise RuntimeError(f"Groq request failed ({response.status_code}): {detail}")
     return response.json()
 
 
@@ -70,7 +72,9 @@ def _post_gemini_generate_content(model: str, payload: dict):
         json=payload,
         timeout=45
     )
-    response.raise_for_status()
+    if not response.ok:
+        detail = response.text[:500]
+        raise RuntimeError(f"Gemini request failed ({response.status_code}): {detail}")
     return response.json()
 
 

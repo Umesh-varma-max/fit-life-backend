@@ -2,7 +2,7 @@ from datetime import date
 from pathlib import Path
 import re
 
-from flask import jsonify
+from flask import current_app, has_app_context, jsonify
 
 from extensions import db
 from models.activity_log import ActivityLog
@@ -254,6 +254,13 @@ def analyze_food_photo(file_storage, food_hint: str = None, current_user=None):
     provider_source = None
     provider_notes = []
 
+    def _log_warning(message: str, error_text: str):
+        if has_app_context():
+            current_app.logger.warning("%s: %s", message, error_text)
+
+    gemini_error = None
+    groq_error = None
+
     try:
         ai_vision = gemini_json_vision(
             system_prompt=VISION_SYSTEM_PROMPT,
@@ -262,7 +269,9 @@ def analyze_food_photo(file_storage, food_hint: str = None, current_user=None):
             mime_type=mime_type
         )
         provider_source = 'gemini_vision'
-    except Exception:
+    except Exception as exc:
+        gemini_error = str(exc)
+        _log_warning("Food scan Gemini failure", gemini_error)
         provider_notes.append('Gemini vision unavailable for this scan.')
         try:
             ai_vision = groq_json_vision(
@@ -272,7 +281,9 @@ def analyze_food_photo(file_storage, food_hint: str = None, current_user=None):
                 mime_type=mime_type
             )
             provider_source = 'groq_vision'
-        except Exception:
+        except Exception as exc:
+            groq_error = str(exc)
+            _log_warning("Food scan Groq failure", groq_error)
             ai_vision = _fallback_analysis(food_hint=food_hint, filename=file_storage.filename)
             if ai_vision:
                 provider_source = 'db_fallback'
@@ -284,12 +295,23 @@ def analyze_food_photo(file_storage, food_hint: str = None, current_user=None):
         ai_vision = _enrich_analysis_with_food_db(ai_vision)
 
     if not ai_vision:
+        provider_error = None
+        if gemini_error and 'API_KEY_INVALID' in gemini_error:
+            provider_error = 'Gemini API key is invalid. Update GEMINI_API_KEY and redeploy.'
+        elif gemini_error and 'Gemini API key is not configured' in gemini_error:
+            provider_error = 'Gemini API key is not configured.'
+        elif groq_error and 'Groq API key is not configured' in groq_error:
+            provider_error = 'Groq API key is not configured.'
+
         return {
             "status": "error",
             "message": (
                 "Could not confidently identify this food from the photo. "
                 "Try a clearer image, capture the package name, or add a food hint."
-            )
+            ),
+            "source": provider_source,
+            "provider_error": provider_error,
+            "provider_notes": provider_notes
         }, 422
 
     estimated_calories = float(ai_vision.get('estimated_calories') or 0)
