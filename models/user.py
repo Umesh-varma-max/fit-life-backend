@@ -20,6 +20,7 @@ class User(db.Model):
     activity_logs   = db.relationship('ActivityLog', backref='user', cascade='all, delete-orphan', lazy='dynamic')
     recommendations = db.relationship('Recommendation', backref='user', cascade='all, delete-orphan')
     workout_plans   = db.relationship('WorkoutPlan', backref='user', cascade='all, delete-orphan')
+    workout_sessions = db.relationship('WorkoutSession', backref='user', cascade='all, delete-orphan')
     reminders       = db.relationship('Reminder', backref='user', cascade='all, delete-orphan')
 
     def to_dict(self):

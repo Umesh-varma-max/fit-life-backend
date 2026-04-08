@@ -4,7 +4,7 @@ from extensions import db
 from models.health_profile import HealthProfile
 from models.recommendation import Recommendation
 from utils.recommendation_engine import generate_recommendation
-from utils.workout_templates import build_goal_based_workout_plan
+from utils.workout_library_engine import generate_personalized_workout_plan
 
 
 def _legacy_workout_map(detailed_plan: dict) -> dict:
@@ -49,7 +49,7 @@ def get_recommendation(user_id: int):
     rec = _upsert_recommendation(user_id, rec_data)
 
     recommendation_payload = rec.to_dict()
-    detailed_workout_plan = build_goal_based_workout_plan(profile.fitness_goal)
+    detailed_workout_plan = generate_personalized_workout_plan(profile)
     recommendation_payload['workout_plan'] = _legacy_workout_map(detailed_workout_plan)
     recommendation_payload['workout_plan_details'] = detailed_workout_plan
 
