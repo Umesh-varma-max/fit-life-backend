@@ -11,6 +11,8 @@ from app import create_app
 from extensions import db
 from models.exercise_library import ExerciseLibrary
 
+FREE_EXERCISE_DB_IMAGE_PREFIX = "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/"
+
 
 def _ensure_list(value):
     if value is None:
@@ -27,28 +29,42 @@ def _upsert_exercise(record: dict):
     if not external_id:
         return False
 
-    exercise = ExerciseLibrary.query.filter_by(external_id=external_id).first()
+    with db.session.no_autoflush:
+        exercise = ExerciseLibrary.query.filter_by(external_id=external_id).first()
     if not exercise:
         exercise = ExerciseLibrary(external_id=external_id)
         db.session.add(exercise)
 
     exercise.name = record.get('name') or exercise.name or external_id
-    exercise.body_parts = _ensure_list(record.get('bodyParts') or record.get('body_parts'))
-    exercise.target_muscles = _ensure_list(record.get('targetMuscles') or record.get('target_muscles'))
+    exercise.body_parts = _ensure_list(record.get('bodyParts') or record.get('body_parts') or record.get('bodyParts'))
+    exercise.target_muscles = _ensure_list(record.get('targetMuscles') or record.get('target_muscles') or record.get('primaryMuscles'))
     exercise.secondary_muscles = _ensure_list(record.get('secondaryMuscles') or record.get('secondary_muscles'))
     exercise.equipments = _ensure_list(record.get('equipments') or record.get('equipment'))
-    exercise.keywords = _ensure_list(record.get('keywords'))
+    exercise.keywords = _ensure_list(record.get('keywords') or record.get('primaryMuscles') or record.get('category'))
     exercise.instructions = _ensure_list(record.get('instructions'))
     exercise.exercise_tips = _ensure_list(record.get('exerciseTips') or record.get('tips'))
     exercise.variations = _ensure_list(record.get('variations'))
     exercise.related_exercise_ids = _ensure_list(record.get('relatedExerciseIds'))
     exercise.gender = record.get('gender')
-    exercise.exercise_type = record.get('exerciseType') or record.get('exercise_type')
-    exercise.overview = record.get('overview')
-    exercise.image_url = record.get('imageUrl') or record.get('image_url')
+    exercise.exercise_type = record.get('exerciseType') or record.get('exercise_type') or record.get('category')
+    exercise.overview = record.get('overview') or (
+        f"{exercise.name} is a {record.get('level', 'general')} {record.get('category', 'fitness')} exercise "
+        f"primarily targeting {', '.join(exercise.target_muscles[:2]) or 'multiple muscle groups'}."
+    )
+
+    images = _ensure_list(record.get('images'))
+    primary_image = images[0] if images else None
+    secondary_image = images[1] if len(images) > 1 else primary_image
+
+    if primary_image and not str(primary_image).startswith('http'):
+        primary_image = f"{FREE_EXERCISE_DB_IMAGE_PREFIX}{primary_image}"
+    if secondary_image and not str(secondary_image).startswith('http'):
+        secondary_image = f"{FREE_EXERCISE_DB_IMAGE_PREFIX}{secondary_image}"
+
+    exercise.image_url = record.get('imageUrl') or record.get('image_url') or primary_image
     exercise.gif_url = record.get('gifUrl') or record.get('gif_url')
-    exercise.video_url = record.get('videoUrl') or record.get('video_url')
-    exercise.source = record.get('source') or 'ExerciseDB'
+    exercise.video_url = record.get('videoUrl') or record.get('video_url') or secondary_image
+    exercise.source = record.get('source') or 'free-exercise-db'
     return True
 
 
@@ -98,7 +114,8 @@ if __name__ == '__main__':
     app = create_app()
     with app.app_context():
         if args.clear:
-            ExerciseLibrary.query.delete()
+            db.session.query(ExerciseLibrary).delete()
+            db.session.commit()
 
         if args.json_path:
             records = _load_records_from_file(Path(args.json_path))
@@ -107,9 +124,11 @@ if __name__ == '__main__':
         else:
             records = _load_records_from_url(args.url, args.api_key)
         imported = 0
-        for record in records:
+        for index, record in enumerate(records, start=1):
             if _upsert_exercise(record):
                 imported += 1
+            if index % 200 == 0:
+                db.session.flush()
 
         db.session.commit()
         print(f'Imported or updated {imported} exercise records.')
