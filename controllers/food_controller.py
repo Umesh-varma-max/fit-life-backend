@@ -20,10 +20,13 @@ ALLOWED_IMAGE_MIME_TYPES = {
 }
 VISION_SYSTEM_PROMPT = (
     'Act as an advanced food recognition and nutrition estimation AI for the FitLife app. '
-    'Analyze the image and provide the most realistic, scientifically grounded nutrition values. '
-    'Identify the exact food item or branded packaged food when visible. '
-    'Estimate portion size from visual cues or packaging. '
-    'Use real-world nutrition knowledge and do not invent exaggerated protein values. '
+    'Analyze the food image and provide the most realistic, scientifically grounded nutrition values possible. '
+    'Identify the food as specifically as you can. If it is a branded packaged food, read the visible brand or product name '
+    'and infer realistic nutrition for a typical single serving of that product. '
+    'Estimate portion size from packaging, hand size, number of pieces, or plate size. '
+    'Use real-world nutrition knowledge and keep calories and macros realistic for the detected food type. '
+    'Do not exaggerate protein. Sweet snacks should usually be carb/sugar heavy and protein-light. '
+    'If you are uncertain, lower the confidence and explain the uncertainty in notes. '
     'Return pure JSON only with this exact shape: '
     '{"food_name": string, "serving_estimate": string, "estimated_calories": number, '
     '"protein_g": number, "carbs_g": number, "fat_g": number, "confidence": string, '
@@ -241,9 +244,10 @@ def analyze_food_photo(file_storage, food_hint: str = None, current_user=None):
         return {"status": "error", "message": "Unsupported image type. Please upload JPG, PNG, WEBP, or HEIC."}, 400
 
     user_prompt = (
-        'Identify the primary food item in this image and estimate a realistic serving size and macros. '
-        'If the image contains a branded package, read the visible product name and use that to infer realistic nutrition. '
-        'If the image contains multiple foods, summarize the main plate total. '
+        'Identify the primary food item in this image and estimate a realistic serving size and nutrition. '
+        'If the image contains a branded package, read the visible product name and use it to infer realistic nutrition. '
+        'If the image contains multiple foods, summarize the main plate total rather than a single ingredient. '
+        'Prefer exact food names over generic labels like "meal" or "snack". '
         f'Optional user hint: {(food_hint or "none").strip() or "none"}.'
     )
 
