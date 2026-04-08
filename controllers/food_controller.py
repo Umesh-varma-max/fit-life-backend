@@ -32,6 +32,14 @@ VISION_SYSTEM_PROMPT = (
     '"protein_g": number, "carbs_g": number, "fat_g": number, "confidence": string, '
     '"notes": string[]}.'
 )
+VISION_CLASSIFIER_SYSTEM_PROMPT = (
+    'Act as a food identification AI for the FitLife app. '
+    'Focus on identifying the most likely food item or branded product visible in the image. '
+    'If you can read package text, include the probable product or brand name. '
+    'If the image is a plain food item, identify the generic food clearly, such as bread, apple, banana, rice, tea, or biscuits. '
+    'Return pure JSON only with this exact shape: '
+    '{"food_name": string, "aliases": string[], "visible_text": string[], "confidence": string, "notes": string[]}.'
+)
 
 FALLBACK_FOOD_CATALOG = [
     {
@@ -278,20 +286,95 @@ def _normalize_lookup_text(text: str) -> str:
 
 
 def _catalog_match(food_hint: str = '', filename: str = '', ai_name: str = ''):
-    lookup = ' '.join(
-        part for part in [
-            _normalize_lookup_text(food_hint),
-            _normalize_lookup_text(Path(filename or '').stem),
-            _normalize_lookup_text(ai_name),
-        ] if part
-    )
+    lookup_parts = [
+        _normalize_lookup_text(food_hint),
+        _normalize_lookup_text(Path(filename or '').stem),
+        _normalize_lookup_text(ai_name),
+    ]
+    lookup = ' '.join(part for part in lookup_parts if part)
     if not lookup:
         return None
 
+    lookup_tokens = set(lookup.split())
+
+    best_entry = None
+    best_score = -1
+
     for entry in FALLBACK_FOOD_CATALOG:
-        if any(keyword in lookup for keyword in entry["keywords"]):
-            return entry
-    return None
+        for keyword in entry["keywords"]:
+            normalized_keyword = _normalize_lookup_text(keyword)
+            if not normalized_keyword:
+                continue
+            if normalized_keyword in lookup:
+                score = len(normalized_keyword.split()) * 10 + len(normalized_keyword)
+                if score > best_score:
+                    best_score = score
+                    best_entry = entry
+                continue
+
+            keyword_tokens = set(normalized_keyword.split())
+            if keyword_tokens and keyword_tokens.issubset(lookup_tokens):
+                score = len(keyword_tokens) * 10 + len(normalized_keyword)
+                if score > best_score:
+                    best_score = score
+                    best_entry = entry
+                continue
+
+            overlap = lookup_tokens.intersection(keyword_tokens)
+            if overlap and len(overlap) == len(keyword_tokens) and len(keyword_tokens) == 1:
+                score = len(normalized_keyword)
+                if score > best_score:
+                    best_score = score
+                    best_entry = entry
+
+    return best_entry
+
+
+def _coarse_food_identification(image_bytes: bytes, mime_type: str, food_hint: str = ''):
+    """Try a simpler AI pass that only identifies the likely food/product name."""
+    user_prompt = (
+        'Identify the most likely food or packaged product in this image. '
+        'If uncertain, still provide the best generic food guess. '
+        'Do not estimate macros here; focus on food naming and visible package text. '
+        f'Optional user hint: {(food_hint or "none").strip() or "none"}.'
+    )
+    payload = gemini_json_vision(
+        system_prompt=VISION_CLASSIFIER_SYSTEM_PROMPT,
+        user_prompt=user_prompt,
+        image_bytes=image_bytes,
+        mime_type=mime_type
+    )
+    food_name = (payload.get('food_name') or '').strip()
+    aliases = payload.get('aliases') or []
+    visible_text = payload.get('visible_text') or []
+    notes = payload.get('notes') or []
+    confidence = payload.get('confidence') or 'Estimated'
+
+    catalog_entry = _catalog_match(
+        food_hint=food_hint,
+        ai_name=' '.join(
+            part for part in [food_name, ' '.join(map(str, aliases)), ' '.join(map(str, visible_text)), ' '.join(map(str, notes))]
+            if part
+        )
+    )
+    if not catalog_entry:
+        return None
+
+    return {
+        'food_name': catalog_entry['food_name'],
+        'serving_estimate': catalog_entry['serving_estimate'],
+        'estimated_calories': catalog_entry['estimated_calories'],
+        'protein_g': catalog_entry['protein_g'],
+        'carbs_g': catalog_entry['carbs_g'],
+        'fat_g': catalog_entry['fat_g'],
+        'confidence': confidence,
+        'notes': [
+            f"Best-effort food identification: {food_name or catalog_entry['food_name']}.",
+            *[f"Visible text: {text}." for text in visible_text[:2]],
+            *notes[:2],
+            'Nutrition estimated from FitLife fallback food catalog after classifier match.'
+        ]
+    }
 
 
 def _scaled_macros(food: FoodItem, quantity_g: float) -> dict:
@@ -591,27 +674,41 @@ def analyze_food_photo(file_storage, food_hint: str = None, current_user=None,
                     mime_type=mime_type
                 )
             )
-            provider_source = 'groq_vision'
+            provider_source = 'gemini_vision'
         except Exception as exc:
-            groq_error = str(exc)
-            _log_warning("Food scan Groq failure", groq_error)
+            gemini_error = str(exc)
+            _log_warning("Food scan Gemini structured fallback failure", gemini_error)
             try:
-                ai_vision = groq_json_vision(
-                    system_prompt=VISION_SYSTEM_PROMPT,
-                    user_prompt=user_prompt,
+                ai_vision = _coarse_food_identification(
                     image_bytes=image_bytes,
-                    mime_type=mime_type
+                    mime_type=mime_type,
+                    food_hint=food_hint or ''
                 )
-                provider_source = 'groq_vision'
-            except Exception as second_exc:
-                groq_error = str(second_exc)
-                _log_warning("Food scan Groq fallback failure", groq_error)
-                ai_vision = _fallback_analysis(food_hint=food_hint, filename=file_storage.filename)
+                provider_source = 'gemini_classifier'
+            except Exception as classifier_exc:
+                gemini_error = str(classifier_exc)
+                _log_warning("Food scan Gemini classifier failure", gemini_error)
+                ai_vision = None
+            if not ai_vision:
+                try:
+                    ai_vision = groq_json_vision(
+                        system_prompt=VISION_SYSTEM_PROMPT,
+                        user_prompt=user_prompt,
+                        image_bytes=image_bytes,
+                        mime_type=mime_type
+                    )
+                    provider_source = 'groq_vision'
+                except Exception as second_exc:
+                    groq_error = str(second_exc)
+                    _log_warning("Food scan Groq fallback failure", groq_error)
+                    ai_vision = _fallback_analysis(food_hint=food_hint, filename=file_storage.filename)
             if ai_vision:
                 provider_source = provider_source or 'db_fallback'
             else:
                 provider_source = 'unresolved'
-            provider_notes.append('Groq vision unavailable for this scan.')
+            provider_notes.append('Structured AI nutrition estimation was unavailable for this scan.')
+            if groq_error:
+                provider_notes.append('Groq vision unavailable for this scan.')
 
     if ai_vision:
         ai_vision = _enrich_analysis_with_food_db(ai_vision)
