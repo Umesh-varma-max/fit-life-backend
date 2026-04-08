@@ -171,6 +171,8 @@ def _exercise_prescription(goal: str, exercise: ExerciseLibrary, plan_tier: int,
         'image_url': exercise.image_url,
         'video_url': exercise.video_url,
         'demo_media_url': exercise.gif_url or exercise.image_url or exercise.video_url,
+        'has_demo_media': bool(exercise.gif_url or exercise.image_url or exercise.video_url),
+        'media_fallback_text': exercise.overview or f'{exercise.name} exercise details are available below.',
         'estimated_calories_burn': calories,
         'posture': exercise.name,
         'posture_cues': (exercise.exercise_tips or [])[:3]

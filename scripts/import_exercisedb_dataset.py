@@ -22,7 +22,22 @@ def _ensure_list(value):
     return [str(value).strip()]
 
 
-def _upsert_exercise(record: dict):
+def _resolve_media_path(filename: str | None, media_root: Path | None):
+    if not filename:
+        return None
+    filename = str(filename).strip()
+    if not filename:
+        return None
+    if filename.startswith('http://') or filename.startswith('https://') or filename.startswith('/static/'):
+        return filename
+    if media_root:
+        candidate = media_root / filename
+        if candidate.exists():
+            return f"/static/exercise_gifs/{filename}"
+    return None
+
+
+def _upsert_exercise(record: dict, media_root: Path | None = None, source_name: str | None = None):
     external_id = str(record.get('exerciseId') or record.get('id') or record.get('external_id') or '').strip()
     if not external_id:
         return False
@@ -44,11 +59,15 @@ def _upsert_exercise(record: dict):
     exercise.related_exercise_ids = _ensure_list(record.get('relatedExerciseIds'))
     exercise.gender = record.get('gender')
     exercise.exercise_type = record.get('exerciseType') or record.get('exercise_type')
-    exercise.overview = record.get('overview')
+    exercise.overview = record.get('overview') or (
+        f"{exercise.name} targets {', '.join(exercise.target_muscles[:2]) or 'multiple muscle groups'} "
+        f"using {', '.join(exercise.equipments[:1]) or 'bodyweight'}."
+    )
     exercise.image_url = record.get('imageUrl') or record.get('image_url')
-    exercise.gif_url = record.get('gifUrl') or record.get('gif_url')
+    gif_value = record.get('gifUrl') or record.get('gif_url')
+    exercise.gif_url = _resolve_media_path(gif_value, media_root) or gif_value
     exercise.video_url = record.get('videoUrl') or record.get('video_url')
-    exercise.source = record.get('source') or 'ExerciseDB'
+    exercise.source = source_name or record.get('source') or 'ExerciseDB'
     return True
 
 
@@ -87,6 +106,8 @@ if __name__ == '__main__':
     parser.add_argument('--api-key', help='Optional bearer token for the HTTP endpoint.')
     parser.add_argument('--rapidapi-key', help='RapidAPI key for ExerciseDB-style endpoints.')
     parser.add_argument('--rapidapi-host', help='RapidAPI host header value.')
+    parser.add_argument('--media-root', help='Optional local directory for GIF/image files referenced by filename.')
+    parser.add_argument('--source-name', help='Override source label stored in the database.')
     parser.add_argument('--clear', action='store_true', help='Delete existing exercise records before import.')
     args = parser.parse_args()
 
@@ -100,6 +121,7 @@ if __name__ == '__main__':
         if args.clear:
             ExerciseLibrary.query.delete()
 
+        media_root = Path(args.media_root) if args.media_root else None
         if args.json_path:
             records = _load_records_from_file(Path(args.json_path))
         elif args.rapidapi_key:
@@ -108,7 +130,7 @@ if __name__ == '__main__':
             records = _load_records_from_url(args.url, args.api_key)
         imported = 0
         for record in records:
-            if _upsert_exercise(record):
+            if _upsert_exercise(record, media_root=media_root, source_name=args.source_name):
                 imported += 1
 
         db.session.commit()
