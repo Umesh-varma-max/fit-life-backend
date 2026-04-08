@@ -71,6 +71,51 @@ FALLBACK_FOOD_CATALOG = [
         "fat_g": 7.9,
     },
     {
+        "keywords": ["bread", "white bread", "slice bread", "sandwich bread", "toast bread"],
+        "food_name": "Whole Wheat Bread",
+        "serving_estimate": "2 slices (56 g)",
+        "estimated_calories": 138,
+        "protein_g": 7.3,
+        "carbs_g": 23.0,
+        "fat_g": 1.9,
+    },
+    {
+        "keywords": ["brown bread", "wheat bread", "whole wheat bread"],
+        "food_name": "Whole Wheat Bread",
+        "serving_estimate": "2 slices (56 g)",
+        "estimated_calories": 138,
+        "protein_g": 7.3,
+        "carbs_g": 23.0,
+        "fat_g": 1.9,
+    },
+    {
+        "keywords": ["toast", "butter toast"],
+        "food_name": "Toast",
+        "serving_estimate": "2 slices (60 g)",
+        "estimated_calories": 160,
+        "protein_g": 5.0,
+        "carbs_g": 26.0,
+        "fat_g": 4.5,
+    },
+    {
+        "keywords": ["tea", "chai", "milk tea"],
+        "food_name": "Milk Tea",
+        "serving_estimate": "1 cup (150 ml)",
+        "estimated_calories": 90,
+        "protein_g": 2.0,
+        "carbs_g": 12.0,
+        "fat_g": 3.5,
+    },
+    {
+        "keywords": ["coffee", "coffee with milk"],
+        "food_name": "Coffee with Milk",
+        "serving_estimate": "1 cup (180 ml)",
+        "estimated_calories": 80,
+        "protein_g": 2.5,
+        "carbs_g": 10.0,
+        "fat_g": 3.0,
+    },
+    {
         "keywords": ["marie gold", "britannia marie", "marie biscuit", "marie biscuits"],
         "food_name": "Britannia Marie Gold",
         "serving_estimate": "4 biscuits (28 g)",
@@ -80,6 +125,15 @@ FALLBACK_FOOD_CATALOG = [
         "fat_g": 3.9,
     },
     {
+        "keywords": ["biscuit", "biscuits", "cookies"],
+        "food_name": "Tea Biscuits",
+        "serving_estimate": "4 biscuits (30 g)",
+        "estimated_calories": 140,
+        "protein_g": 2.1,
+        "carbs_g": 21.0,
+        "fat_g": 5.2,
+    },
+    {
         "keywords": ["lays", "chips", "classic chips", "potato chips"],
         "food_name": "Lay's Classic Chips",
         "serving_estimate": "1 small pack (28 g)",
@@ -87,6 +141,42 @@ FALLBACK_FOOD_CATALOG = [
         "protein_g": 2.0,
         "carbs_g": 15.0,
         "fat_g": 10.0,
+    },
+    {
+        "keywords": ["maggi", "noodles", "instant noodles"],
+        "food_name": "Instant Noodles",
+        "serving_estimate": "1 pack prepared (70 g dry)",
+        "estimated_calories": 320,
+        "protein_g": 7.0,
+        "carbs_g": 43.0,
+        "fat_g": 13.0,
+    },
+    {
+        "keywords": ["burger", "veg burger", "chicken burger"],
+        "food_name": "Burger",
+        "serving_estimate": "1 burger (140 g)",
+        "estimated_calories": 295,
+        "protein_g": 13.0,
+        "carbs_g": 31.0,
+        "fat_g": 13.0,
+    },
+    {
+        "keywords": ["pizza", "pizza slice"],
+        "food_name": "Pizza Slice",
+        "serving_estimate": "1 slice (107 g)",
+        "estimated_calories": 285,
+        "protein_g": 12.0,
+        "carbs_g": 36.0,
+        "fat_g": 10.0,
+    },
+    {
+        "keywords": ["samosa"],
+        "food_name": "Samosa",
+        "serving_estimate": "1 piece (100 g)",
+        "estimated_calories": 262,
+        "protein_g": 4.0,
+        "carbs_g": 30.0,
+        "fat_g": 14.0,
     },
     {
         "keywords": ["kurkure", "masala munch"],
@@ -123,6 +213,15 @@ FALLBACK_FOOD_CATALOG = [
         "protein_g": 1.2,
         "carbs_g": 12.0,
         "fat_g": 5.5,
+    },
+    {
+        "keywords": ["soft drink", "cola", "coke", "pepsi", "sprite", "fanta"],
+        "food_name": "Soft Drink",
+        "serving_estimate": "1 can (330 ml)",
+        "estimated_calories": 139,
+        "protein_g": 0.0,
+        "carbs_g": 35.0,
+        "fat_g": 0.0,
     },
     {
         "keywords": ["cake", "layerz", "layerz cake", "cup cake", "pastry"],
@@ -379,6 +478,27 @@ def _normalize_nutriscan_payload(payload: dict):
     }
 
 
+def _build_scan_recovery(food_hint: str, provider_source: str, confidence: str):
+    confidence_normalized = (confidence or '').strip().lower()
+    needs_confirmation = confidence_normalized in {'low', 'fallback', 'hint-based', 'estimated'}
+    suggestions = []
+    if not (food_hint or '').strip():
+        suggestions.append('Add the package or food name in the hint field.')
+    suggestions.extend([
+        'Keep the food item centered and closer to the camera.',
+        'Capture the package front or nutrition label for branded snacks.',
+        'Retake the photo in brighter lighting with less background clutter.'
+    ])
+    return {
+        "needs_user_confirmation": needs_confirmation,
+        "provider_source": provider_source,
+        "suggested_hints": suggestions[:3],
+        "recommended_action": (
+            "confirm_or_log" if not needs_confirmation else "review_before_logging"
+        )
+    }
+
+
 def _enrich_analysis_with_food_db(ai_vision: dict) -> dict:
     """Blend AI vision output with local DB nutrition when a close match exists."""
     food_name = (ai_vision.get('food_name') or '').strip()
@@ -417,7 +537,8 @@ def _enrich_analysis_with_food_db(ai_vision: dict) -> dict:
     return ai_vision
 
 
-def analyze_food_photo(file_storage, food_hint: str = None, current_user=None):
+def analyze_food_photo(file_storage, food_hint: str = None, current_user=None,
+                       meal_time: str = None, should_log: bool = False, log_date: str = None):
     """Analyze a real food photo using Groq vision and return nutrition JSON."""
     def _log_warning(message: str, error_text: str):
         if has_app_context():
@@ -538,6 +659,11 @@ def analyze_food_photo(file_storage, food_hint: str = None, current_user=None):
         "feedback": _build_food_feedback(estimated_calories, protein_g, 0),
         "source": provider_source or "ai_vision"
     }
+    normalized_analysis["scan_recovery"] = _build_scan_recovery(
+        food_hint=food_hint or '',
+        provider_source=normalized_analysis["source"],
+        confidence=normalized_analysis["confidence"]
+    )
 
     normalized_analysis["diet_warning"] = _build_goal_warning(
         calories=normalized_analysis["estimated_calories"],
@@ -547,11 +673,23 @@ def analyze_food_photo(file_storage, food_hint: str = None, current_user=None):
         profile=getattr(current_user, 'profile', None)
     )
 
-    return {
+    response_payload = {
         "status": "success",
         "analysis": normalized_analysis,
         "food": normalized_analysis
-    }, 200
+    }
+
+    if should_log:
+        pending_log = ActivityLog(
+            user_id=None,
+            log_date=date.fromisoformat(log_date) if log_date else date.today(),
+            log_type='meal',
+            description=f"{(meal_time or 'meal').title()}: {normalized_analysis['food_name']}",
+            calories_in=int(round(normalized_analysis['estimated_calories']))
+        )
+        response_payload['pending_log'] = pending_log
+
+    return response_payload, 200
 
 
 def scan_food(barcode: str = None, food_name: str = None, quantity_g=100, meal_time: str = None,

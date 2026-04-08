@@ -53,6 +53,15 @@ def food_analyze_photo(current_user):
     response_payload, status_code = analyze_food_photo(
         photo,
         food_hint=request.form.get('food_hint', '').strip(),
-        current_user=current_user
+        current_user=current_user,
+        meal_time=request.form.get('meal_time'),
+        should_log=bool(
+            request.form.get('log_meal')
+            or request.form.get('mark_as_eaten')
+            or request.form.get('auto_log')
+        ),
+        log_date=request.form.get('log_date')
     )
-    return jsonify(response_payload), status_code
+    if status_code != 200:
+        return jsonify(response_payload), status_code
+    return finalize_food_log(current_user.id, response_payload)
