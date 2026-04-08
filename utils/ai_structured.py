@@ -145,3 +145,85 @@ def gemini_json_vision(system_prompt: str, user_prompt: str, image_bytes: bytes,
     response_json = _post_gemini_generate_content(DEFAULT_GEMINI_VISION_MODEL, payload)
     raw_text = response_json["candidates"][0]["content"]["parts"][0]["text"]
     return _parse_json_output(raw_text)
+
+
+def gemini_nutrition_vision(image_bytes: bytes, mime_type: str):
+    """Use a stricter NutriScan-style Gemini nutrition schema."""
+    image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+
+    payload = {
+        "contents": [
+            {
+                "parts": [
+                    {
+                        "inlineData": {
+                            "mimeType": mime_type,
+                            "data": image_b64
+                        }
+                    },
+                    {
+                        "text": (
+                            "Analyze this food image and provide realistic nutrition values. "
+                            "Return JSON only."
+                        )
+                    }
+                ]
+            }
+        ],
+        "generationConfig": {
+            "temperature": 0.2,
+            "responseMimeType": "application/json",
+            "responseSchema": {
+                "type": "OBJECT",
+                "properties": {
+                    "foodName": {"type": "STRING"},
+                    "estimatedPortion": {"type": "STRING"},
+                    "calories": {"type": "NUMBER"},
+                    "protein": {"type": "STRING"},
+                    "carbs": {"type": "STRING"},
+                    "fats": {"type": "STRING"},
+                    "sugar": {"type": "STRING"},
+                    "confidenceLevel": {
+                        "type": "STRING",
+                        "enum": ["High", "Medium", "Low"]
+                    },
+                    "ingredients": {
+                        "type": "ARRAY",
+                        "items": {"type": "STRING"}
+                    }
+                },
+                "required": [
+                    "foodName",
+                    "estimatedPortion",
+                    "calories",
+                    "protein",
+                    "carbs",
+                    "fats",
+                    "sugar",
+                    "confidenceLevel",
+                    "ingredients"
+                ]
+            }
+        },
+        "systemInstruction": {
+            "parts": [
+                {
+                    "text": (
+                        "Act as an advanced food recognition and nutrition estimation AI. "
+                        "Analyze the food image and provide the MOST REALISTIC and SCIENTIFICALLY GROUNDED nutrition values. "
+                        "Identify the exact food item specifically. "
+                        "Estimate portion size in grams based on visual clues like plate size, hand comparison, packaging, or number of pieces. "
+                        "Use real-world nutrition knowledge and do not invent exaggerated values. "
+                        "Calories must match portion size realistically. "
+                        "Protein must not be exaggerated. "
+                        "Carbs, fats, and sugar must align with the food type. "
+                        "If uncertain, provide a reasonable estimate with lower confidence."
+                    )
+                }
+            ]
+        }
+    }
+
+    response_json = _post_gemini_generate_content(DEFAULT_GEMINI_VISION_MODEL, payload)
+    raw_text = response_json["candidates"][0]["content"]["parts"][0]["text"]
+    return _parse_json_output(raw_text)

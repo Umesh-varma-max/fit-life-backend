@@ -7,7 +7,7 @@ from flask import current_app, has_app_context, jsonify
 from extensions import db
 from models.activity_log import ActivityLog
 from models.food_item import FoodItem
-from utils.ai_structured import gemini_json_vision, groq_json_vision
+from utils.ai_structured import gemini_json_vision, gemini_nutrition_vision, groq_json_vision
 
 MAX_IMAGE_SIZE_BYTES = 8 * 1024 * 1024
 ALLOWED_IMAGE_MIME_TYPES = {
@@ -338,6 +338,47 @@ def _extract_serving_grams(serving_estimate: str):
     return grams if grams > 0 else None
 
 
+def _extract_number(text_value, default=0.0):
+    if isinstance(text_value, (int, float)):
+        return float(text_value)
+    match = re.search(r'(\d+(?:\.\d+)?)', str(text_value or ''))
+    if not match:
+        return default
+    try:
+        return float(match.group(1))
+    except ValueError:
+        return default
+
+
+def _normalize_nutriscan_payload(payload: dict):
+    """Map NutriScan-style Gemini fields into FitLife scanner fields."""
+    if not payload:
+        return payload
+
+    if 'food_name' in payload:
+        return payload
+
+    ingredients = payload.get('ingredients') or []
+    confidence = payload.get('confidenceLevel') or payload.get('confidence') or 'Estimated'
+    notes = []
+    if ingredients:
+        notes.append(f"Detected ingredients: {', '.join(ingredients[:5])}.")
+    sugar = payload.get('sugar')
+    if sugar:
+        notes.append(f"Estimated sugar: {sugar}.")
+
+    return {
+        'food_name': payload.get('foodName') or 'Unknown Meal',
+        'serving_estimate': payload.get('estimatedPortion') or '1 serving',
+        'estimated_calories': _extract_number(payload.get('calories')),
+        'protein_g': _extract_number(payload.get('protein')),
+        'carbs_g': _extract_number(payload.get('carbs')),
+        'fat_g': _extract_number(payload.get('fats')),
+        'confidence': confidence,
+        'notes': notes
+    }
+
+
 def _enrich_analysis_with_food_db(ai_vision: dict) -> dict:
     """Blend AI vision output with local DB nutrition when a close match exists."""
     food_name = (ai_vision.get('food_name') or '').strip()
@@ -409,11 +450,11 @@ def analyze_food_photo(file_storage, food_hint: str = None, current_user=None):
     groq_error = None
 
     try:
-        ai_vision = gemini_json_vision(
-            system_prompt=VISION_SYSTEM_PROMPT,
-            user_prompt=user_prompt,
-            image_bytes=image_bytes,
-            mime_type=mime_type
+        ai_vision = _normalize_nutriscan_payload(
+            gemini_nutrition_vision(
+                image_bytes=image_bytes,
+                mime_type=mime_type
+            )
         )
         provider_source = 'gemini_vision'
     except Exception as exc:
@@ -421,19 +462,32 @@ def analyze_food_photo(file_storage, food_hint: str = None, current_user=None):
         _log_warning("Food scan Gemini failure", gemini_error)
         provider_notes.append('Gemini vision unavailable for this scan.')
         try:
-            ai_vision = groq_json_vision(
-                system_prompt=VISION_SYSTEM_PROMPT,
-                user_prompt=user_prompt,
-                image_bytes=image_bytes,
-                mime_type=mime_type
+            ai_vision = _normalize_nutriscan_payload(
+                gemini_json_vision(
+                    system_prompt=VISION_SYSTEM_PROMPT,
+                    user_prompt=user_prompt,
+                    image_bytes=image_bytes,
+                    mime_type=mime_type
+                )
             )
             provider_source = 'groq_vision'
         except Exception as exc:
             groq_error = str(exc)
             _log_warning("Food scan Groq failure", groq_error)
-            ai_vision = _fallback_analysis(food_hint=food_hint, filename=file_storage.filename)
+            try:
+                ai_vision = groq_json_vision(
+                    system_prompt=VISION_SYSTEM_PROMPT,
+                    user_prompt=user_prompt,
+                    image_bytes=image_bytes,
+                    mime_type=mime_type
+                )
+                provider_source = 'groq_vision'
+            except Exception as second_exc:
+                groq_error = str(second_exc)
+                _log_warning("Food scan Groq fallback failure", groq_error)
+                ai_vision = _fallback_analysis(food_hint=food_hint, filename=file_storage.filename)
             if ai_vision:
-                provider_source = 'db_fallback'
+                provider_source = provider_source or 'db_fallback'
             else:
                 provider_source = 'unresolved'
             provider_notes.append('Groq vision unavailable for this scan.')
