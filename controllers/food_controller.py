@@ -33,6 +33,108 @@ VISION_SYSTEM_PROMPT = (
     '"notes": string[]}.'
 )
 
+FALLBACK_FOOD_CATALOG = [
+    {
+        "keywords": ["apple", "red apple", "green apple"],
+        "food_name": "Apple",
+        "serving_estimate": "1 medium apple (182 g)",
+        "estimated_calories": 95,
+        "protein_g": 0.5,
+        "carbs_g": 25.0,
+        "fat_g": 0.3,
+    },
+    {
+        "keywords": ["banana"],
+        "food_name": "Banana",
+        "serving_estimate": "1 medium banana (118 g)",
+        "estimated_calories": 105,
+        "protein_g": 1.3,
+        "carbs_g": 27.0,
+        "fat_g": 0.4,
+    },
+    {
+        "keywords": ["orange"],
+        "food_name": "Orange",
+        "serving_estimate": "1 medium orange (131 g)",
+        "estimated_calories": 62,
+        "protein_g": 1.2,
+        "carbs_g": 15.4,
+        "fat_g": 0.2,
+    },
+    {
+        "keywords": ["milk", "whole milk"],
+        "food_name": "Milk (Whole)",
+        "serving_estimate": "1 glass (240 ml)",
+        "estimated_calories": 146,
+        "protein_g": 7.7,
+        "carbs_g": 11.7,
+        "fat_g": 7.9,
+    },
+    {
+        "keywords": ["marie gold", "britannia marie", "marie biscuit", "marie biscuits"],
+        "food_name": "Britannia Marie Gold",
+        "serving_estimate": "4 biscuits (28 g)",
+        "estimated_calories": 120,
+        "protein_g": 2.0,
+        "carbs_g": 19.6,
+        "fat_g": 3.9,
+    },
+    {
+        "keywords": ["lays", "chips", "classic chips", "potato chips"],
+        "food_name": "Lay's Classic Chips",
+        "serving_estimate": "1 small pack (28 g)",
+        "estimated_calories": 150,
+        "protein_g": 2.0,
+        "carbs_g": 15.0,
+        "fat_g": 10.0,
+    },
+    {
+        "keywords": ["kurkure", "masala munch"],
+        "food_name": "Kurkure Masala Munch",
+        "serving_estimate": "1 small pack (30 g)",
+        "estimated_calories": 156,
+        "protein_g": 1.8,
+        "carbs_g": 17.4,
+        "fat_g": 9.0,
+    },
+    {
+        "keywords": ["milkybar", "milky bar", "white chocolate"],
+        "food_name": "Milkybar",
+        "serving_estimate": "1 mini bar (12 g)",
+        "estimated_calories": 64,
+        "protein_g": 0.8,
+        "carbs_g": 7.7,
+        "fat_g": 3.4,
+    },
+    {
+        "keywords": ["dairy milk", "cadbury dairy milk", "milk chocolate"],
+        "food_name": "Cadbury Dairy Milk",
+        "serving_estimate": "1 mini bar (24 g)",
+        "estimated_calories": 128,
+        "protein_g": 1.8,
+        "carbs_g": 14.2,
+        "fat_g": 7.1,
+    },
+    {
+        "keywords": ["kitkat", "kit kat", "wafer chocolate", "wafer bar"],
+        "food_name": "KitKat",
+        "serving_estimate": "1 bar (20 g)",
+        "estimated_calories": 104,
+        "protein_g": 1.2,
+        "carbs_g": 12.0,
+        "fat_g": 5.5,
+    },
+    {
+        "keywords": ["cake", "layerz", "layerz cake", "cup cake", "pastry"],
+        "food_name": "Layer Cake Snack",
+        "serving_estimate": "1 cake bar (45 g)",
+        "estimated_calories": 190,
+        "protein_g": 2.4,
+        "carbs_g": 26.0,
+        "fat_g": 8.4,
+    },
+]
+
 
 def search_food(query: str):
     """Search food items by name (case-insensitive LIKE query)."""
@@ -69,6 +171,28 @@ def _find_food(barcode: str = None, food_name: str = None):
         return partial_match, 'name_partial'
 
     return None, None
+
+
+def _normalize_lookup_text(text: str) -> str:
+    cleaned = re.sub(r'[^a-z0-9\s]', ' ', (text or '').lower())
+    return re.sub(r'\s+', ' ', cleaned).strip()
+
+
+def _catalog_match(food_hint: str = '', filename: str = '', ai_name: str = ''):
+    lookup = ' '.join(
+        part for part in [
+            _normalize_lookup_text(food_hint),
+            _normalize_lookup_text(Path(filename or '').stem),
+            _normalize_lookup_text(ai_name),
+        ] if part
+    )
+    if not lookup:
+        return None
+
+    for entry in FALLBACK_FOOD_CATALOG:
+        if any(keyword in lookup for keyword in entry["keywords"]):
+            return entry
+    return None
 
 
 def _scaled_macros(food: FoodItem, quantity_g: float) -> dict:
@@ -182,6 +306,19 @@ def _fallback_analysis(food_hint: str = '', filename: str = '') -> dict:
             'notes': [f'Estimated using local nutrition data ({matched_by}).']
         }
 
+    catalog_entry = _catalog_match(food_hint=hint, filename=filename)
+    if catalog_entry:
+        return {
+            'food_name': catalog_entry['food_name'],
+            'serving_estimate': catalog_entry['serving_estimate'],
+            'estimated_calories': catalog_entry['estimated_calories'],
+            'protein_g': catalog_entry['protein_g'],
+            'carbs_g': catalog_entry['carbs_g'],
+            'fat_g': catalog_entry['fat_g'],
+            'confidence': 'Hint-based',
+            'notes': ['Estimated using FitLife fallback food catalog.']
+        }
+
     return None
 
 
@@ -209,6 +346,17 @@ def _enrich_analysis_with_food_db(ai_vision: dict) -> dict:
 
     food, matched_by = _find_food(food_name=food_name)
     if not food:
+        catalog_entry = _catalog_match(ai_name=food_name)
+        if catalog_entry:
+            ai_vision['food_name'] = catalog_entry['food_name']
+            ai_vision['serving_estimate'] = ai_vision.get('serving_estimate') or catalog_entry['serving_estimate']
+            ai_vision['estimated_calories'] = catalog_entry['estimated_calories']
+            ai_vision['protein_g'] = catalog_entry['protein_g']
+            ai_vision['carbs_g'] = catalog_entry['carbs_g']
+            ai_vision['fat_g'] = catalog_entry['fat_g']
+            notes = list(ai_vision.get('notes') or [])
+            notes.append('Nutrition refined using FitLife fallback food catalog.')
+            ai_vision['notes'] = notes
         return ai_vision
 
     grams = _extract_serving_grams(ai_vision.get('serving_estimate'))
