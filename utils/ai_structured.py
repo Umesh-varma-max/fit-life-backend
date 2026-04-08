@@ -1,5 +1,5 @@
 """
-Helpers for JSON-only Groq responses and graceful fallback parsing.
+Helpers for JSON-only Gemini/Groq responses and graceful fallback parsing.
 """
 
 import base64
@@ -125,8 +125,8 @@ def gemini_json_vision(system_prompt: str, user_prompt: str, image_bytes: bytes,
             {
                 "parts": [
                     {
-                        "inline_data": {
-                            "mime_type": mime_type,
+                        "inlineData": {
+                            "mimeType": mime_type,
                             "data": image_b64
                         }
                     },
