@@ -3,8 +3,10 @@ from flask import jsonify
 from extensions import db
 from models.health_profile import HealthProfile
 from models.recommendation import Recommendation
+from models.workout_session import WorkoutSession
 from utils.bmi_calculator import (
-    calculate_bmi, calculate_bmr, calculate_tdee, calculate_daily_calories
+    calculate_bmi, calculate_bmr, calculate_tdee, calculate_daily_calories,
+    calculate_body_fat_percentage, get_body_fat_category, get_bmi_category
 )
 from utils.recommendation_engine import generate_recommendation
 
@@ -40,6 +42,10 @@ def save_profile(user_id: int, data: dict):
     """Create or update health profile. Auto-calculates BMI, BMR, TDEE."""
     # Calculate health metrics
     bmi  = calculate_bmi(data['weight_kg'], data['height_cm'])
+    body_fat_percentage = calculate_body_fat_percentage(
+        data['weight_kg'], data['height_cm'], data['age'], data['gender'], bmi=bmi
+    )
+    body_fat_category = get_body_fat_category(body_fat_percentage, data['gender'])
     bmr  = calculate_bmr(data['weight_kg'], data['height_cm'], data['age'], data['gender'])
     tdee = calculate_tdee(bmr, data['activity_level'])
     cal  = calculate_daily_calories(tdee, data['fitness_goal'])
@@ -51,6 +57,8 @@ def save_profile(user_id: int, data: dict):
         for key, val in data.items():
             setattr(profile, key, val)
         profile.bmi = bmi
+        profile.body_fat_percentage = body_fat_percentage
+        profile.body_fat_category = body_fat_category
         profile.bmr = bmr
         profile.daily_calories = cal
     else:
@@ -58,12 +66,20 @@ def save_profile(user_id: int, data: dict):
         profile = HealthProfile(
             user_id=user_id,
             bmi=bmi,
+            body_fat_percentage=body_fat_percentage,
+            body_fat_category=body_fat_category,
             bmr=bmr,
             daily_calories=cal,
             **data
         )
         db.session.add(profile)
 
+    db.session.commit()
+
+    WorkoutSession.query.filter_by(user_id=user_id, status='active').update({
+        'status': 'reset',
+        'updated_at': db.func.now()
+    }, synchronize_session=False)
     db.session.commit()
 
     # Auto-regenerate recommendations after profile save
@@ -73,6 +89,9 @@ def save_profile(user_id: int, data: dict):
         "status": "success",
         "message": "Profile saved",
         "bmi": bmi,
+        "bmi_category": get_bmi_category(bmi),
+        "body_fat_percentage": body_fat_percentage,
+        "body_fat_category": body_fat_category,
         "bmr": bmr,
         "daily_calories": cal,
         "goal_label": GOAL_DISPLAY_LABELS.get(data['fitness_goal'], 'Get Fitter'),

@@ -10,8 +10,11 @@ from models.workout_plan import WorkoutPlan
 from models.trainer import Trainer
 from models.doctor import Doctor
 from models.reminder import Reminder
+from models.workout_session import WorkoutSession
+from models.body_metric_reference import BodyMetricReference
 
 __all__ = [
     'User', 'HealthProfile', 'ActivityLog', 'Recommendation',
-    'FoodItem', 'WorkoutPlan', 'Trainer', 'Doctor', 'Reminder'
+    'FoodItem', 'WorkoutPlan', 'Trainer', 'Doctor', 'Reminder',
+    'WorkoutSession', 'BodyMetricReference'
 ]
