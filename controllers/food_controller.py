@@ -653,6 +653,13 @@ def analyze_food_photo(file_storage, food_hint: str = None, current_user=None,
     gemini_error = None
     groq_error = None
 
+    def _human_provider_error():
+        if gemini_error:
+            return gemini_error[:500]
+        if groq_error:
+            return groq_error[:500]
+        return None
+
     try:
         ai_vision = _normalize_nutriscan_payload(
             gemini_nutrition_vision(
@@ -756,6 +763,8 @@ def analyze_food_photo(file_storage, food_hint: str = None, current_user=None,
         "feedback": _build_food_feedback(estimated_calories, protein_g, 0),
         "source": provider_source or "ai_vision"
     }
+    normalized_analysis["provider_error"] = _human_provider_error()
+    normalized_analysis["provider_notes"] = provider_notes
     normalized_analysis["scan_recovery"] = _build_scan_recovery(
         food_hint=food_hint or '',
         provider_source=normalized_analysis["source"],
