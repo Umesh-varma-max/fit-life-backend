@@ -4,7 +4,7 @@ from extensions import db
 from models.health_profile import HealthProfile
 from models.recommendation import Recommendation
 from utils.recommendation_engine import generate_recommendation
-from utils.workout_profile_engine import build_profile_driven_workout_payload
+from utils.workout_templates import build_goal_based_workout_plan
 
 
 def _legacy_workout_map(detailed_plan: dict) -> dict:
@@ -49,17 +49,9 @@ def get_recommendation(user_id: int):
     rec = _upsert_recommendation(user_id, rec_data)
 
     recommendation_payload = rec.to_dict()
-    workout_payload = build_profile_driven_workout_payload(user_id)
-    recommendation_payload['workout_plan'] = _legacy_workout_map({
-        'days': workout_payload.get('plan', [])
-    })
-    recommendation_payload['workout_plan_details'] = {
-        'goal': workout_payload.get('goal'),
-        'goal_label': workout_payload.get('goal_label'),
-        'goal_badge': workout_payload.get('goal_badge'),
-        'goal_eta_weeks': workout_payload.get('goal_eta_weeks'),
-        'days': workout_payload.get('plan', [])
-    }
+    detailed_workout_plan = build_goal_based_workout_plan(profile.fitness_goal)
+    recommendation_payload['workout_plan'] = _legacy_workout_map(detailed_workout_plan)
+    recommendation_payload['workout_plan_details'] = detailed_workout_plan
 
     return jsonify({
         "status": "success",

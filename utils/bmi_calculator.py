@@ -18,38 +18,6 @@ GOAL_CALORIE_ADJUSTMENTS = {
 }
 
 
-def calculate_body_fat_percentage(weight_kg: float, height_cm: float, age: int, gender: str, bmi: float = None) -> float:
-    """Estimate body fat percentage using the Deurenberg BMI-based formula."""
-    bmi_value = bmi if bmi is not None else calculate_bmi(weight_kg, height_cm)
-    sex_factor = 1 if gender == 'male' else 0
-    body_fat = (1.20 * bmi_value) + (0.23 * age) - (10.8 * sex_factor) - 5.4
-    return round(max(3.0, body_fat), 2)
-
-
-def get_body_fat_category(body_fat_percentage: float, gender: str) -> str:
-    """Return a practical body-fat category split by gender."""
-    if gender == 'male':
-        if body_fat_percentage < 6:
-            return 'Essential Fat'
-        if body_fat_percentage < 14:
-            return 'Athlete'
-        if body_fat_percentage < 18:
-            return 'Fitness'
-        if body_fat_percentage < 25:
-            return 'Acceptable'
-        return 'Obese'
-
-    if body_fat_percentage < 14:
-        return 'Essential Fat'
-    if body_fat_percentage < 21:
-        return 'Athlete'
-    if body_fat_percentage < 25:
-        return 'Fitness'
-    if body_fat_percentage < 32:
-        return 'Acceptable'
-    return 'Obese'
-
-
 def calculate_bmi(weight_kg: float, height_cm: float) -> float:
     """BMI = weight(kg) / height(m)^2"""
     height_m = height_cm / 100

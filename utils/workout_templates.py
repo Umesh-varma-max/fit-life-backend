@@ -385,25 +385,12 @@ def enrich_exercise(exercise: dict) -> dict:
     posture_meta = POSTURE_LIBRARY.get(name, DEFAULT_POSTURE)
     estimated_duration = _estimate_duration_min(exercise)
     estimated_burn = _estimate_calories_burn(exercise, posture_meta)
-    duration_min = int(exercise.get('duration_min') or 0)
-    duration_seconds = int(exercise.get('duration_seconds') or (duration_min * 60 if duration_min else estimated_duration * 60))
-    rest_seconds = int(exercise.get('rest_seconds') or (45 if exercise.get('sets') else 30))
 
     return {
         'name': name,
-        'duration_min': duration_min,
-        'duration_seconds': duration_seconds,
-        'rest_seconds': rest_seconds,
+        'duration_min': int(exercise.get('duration_min') or 0),
         'sets': int(exercise.get('sets') or 0),
         'reps': int(exercise.get('reps') or 0),
-        'muscle_group': exercise.get('muscle_group') or name.split()[-1].lower(),
-        'description': exercise.get('description') or posture_meta['posture'],
-        'instructions': exercise.get('instructions') or posture_meta['posture_cues'],
-        'exercise_tips': exercise.get('exercise_tips') or posture_meta['posture_cues'],
-        'gif_url': exercise.get('gif_url'),
-        'image_url': exercise.get('image_url'),
-        'video_url': exercise.get('video_url'),
-        'demo_media_url': exercise.get('demo_media_url') or exercise.get('gif_url') or exercise.get('image_url') or exercise.get('video_url'),
         'posture': posture_meta['posture'],
         'posture_cues': posture_meta['posture_cues'],
         'estimated_duration_min': estimated_duration,

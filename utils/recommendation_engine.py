@@ -7,7 +7,7 @@ BMI, fitness goal, and food preference.
 
 from utils.bmi_calculator import get_bmi_category
 from utils.diet_templates import DIET_TEMPLATES
-from utils.workout_profile_engine import build_profile_driven_workout_payload
+from utils.workout_templates import build_goal_based_workout_plan
 
 WEEKLY_TIPS = {
     'weight_loss': [
@@ -61,24 +61,14 @@ def generate_recommendation(profile) -> dict:
     food_key = food_pref if food_pref in DIET_TEMPLATES[diet_key] else 'non-veg'
 
     diet_plan = DIET_TEMPLATES[diet_key][food_key]
-    workout_payload = build_profile_driven_workout_payload(profile.user_id)
-    workout_plan_details = {
-        'goal': workout_payload.get('goal'),
-        'goal_label': workout_payload.get('goal_label'),
-        'goal_badge': workout_payload.get('goal_badge'),
-        'goal_eta_weeks': workout_payload.get('goal_eta_weeks'),
-        'days': workout_payload.get('plan', [])
-    }
+    workout_plan_details = build_goal_based_workout_plan(goal)
     workout_plan = {
         day['day']: [
             {
                 'name': exercise.get('name'),
                 'sets': exercise.get('sets', 0),
                 'reps': exercise.get('reps', 0),
-                'duration_min': exercise.get('estimated_duration_min') or exercise.get('duration_min', 0),
-                'duration_seconds': exercise.get('duration_seconds', 0),
-                'rest_seconds': exercise.get('rest_seconds', 0),
-                'estimated_calories_burn': exercise.get('estimated_calories_burn', 0)
+                'duration_min': exercise.get('estimated_duration_min') or exercise.get('duration_min', 0)
             }
             for exercise in day.get('exercises', [])
         ]
