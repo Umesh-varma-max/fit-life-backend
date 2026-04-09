@@ -30,6 +30,8 @@ def import_csv(csv_path: str, source_dataset: str):
     if not path.exists():
         raise FileNotFoundError(f'CSV not found: {csv_path}')
 
+    BodyMetricReference.query.filter_by(source_dataset=source_dataset).delete(synchronize_session=False)
+
     inserted = 0
     with path.open('r', encoding='utf-8-sig', newline='') as handle:
         reader = csv.DictReader(handle)
@@ -57,9 +59,10 @@ def import_csv(csv_path: str, source_dataset: str):
 if __name__ == '__main__':
     app = create_app()
     with app.app_context():
+        data_dir = ROOT / 'data'
         datasets = [
-            (r'C:\Users\rajus\OneDrive\Desktop\archive\final_dataset.csv', 'bmi_reference'),
-            (r'C:\Users\rajus\OneDrive\Desktop\archive\final_dataset_BFP .csv', 'bfp_reference'),
+            (data_dir / 'final_dataset.csv', 'bmi_reference'),
+            (data_dir / 'final_dataset_BFP .csv', 'bfp_reference'),
         ]
         total = 0
         for csv_path, source in datasets:
