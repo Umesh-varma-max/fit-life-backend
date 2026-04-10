@@ -3,7 +3,7 @@ from flask import Blueprint, request
 from middleware.auth_middleware import jwt_required_custom
 from middleware.validation_middleware import validate_body
 from schemas.activity_schema import ActivityLogSchema
-from controllers.activity_controller import log_activity, get_activity
+from controllers.activity_controller import log_activity, get_activity, get_activity_image
 from datetime import date
 
 activity_bp = Blueprint('activity', __name__, url_prefix='/api')
@@ -27,3 +27,9 @@ def activity_get(current_user):
         except ValueError:
             log_date = date.today()
     return get_activity(current_user.id, log_date)
+
+
+@activity_bp.route('/activity/<int:log_id>/image', methods=['GET'])
+@jwt_required_custom
+def activity_image_get(current_user, log_id):
+    return get_activity_image(current_user.id, log_id)

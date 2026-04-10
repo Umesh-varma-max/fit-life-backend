@@ -1,5 +1,7 @@
 # controllers/activity_controller.py
-from flask import jsonify
+from io import BytesIO
+
+from flask import jsonify, send_file
 from extensions import db
 from models.activity_log import ActivityLog
 from datetime import date
@@ -55,3 +57,21 @@ def get_activity(user_id: int, log_date=None):
         },
         "logs": [l.to_dict() for l in logs]
     }), 200
+
+
+def get_activity_image(user_id: int, log_id: int):
+    """Return a persisted scan image for a meal/activity log."""
+    log = ActivityLog.query.filter_by(id=log_id, user_id=user_id).first()
+    if not log:
+        return jsonify({"status": "error", "message": "Activity log not found"}), 404
+    if not log.image_blob or not log.image_mime_type:
+        return jsonify({"status": "error", "message": "No image stored for this log"}), 404
+
+    download_name = log.image_filename or f"scan-{log.id}.jpg"
+    return send_file(
+        BytesIO(log.image_blob),
+        mimetype=log.image_mime_type,
+        download_name=download_name,
+        as_attachment=False,
+        max_age=86400
+    )

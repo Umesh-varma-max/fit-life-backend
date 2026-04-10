@@ -784,6 +784,9 @@ def analyze_food_photo(file_storage, food_hint: str = None, current_user=None,
             description=f"{(meal_time or 'meal').title()}: {normalized_analysis['food_name']}",
             calories_in=int(round(normalized_analysis['estimated_calories']))
         )
+        pending_log.image_blob = image_bytes
+        pending_log.image_mime_type = mime_type
+        pending_log.image_filename = file_storage.filename or f"food-scan-{date.today().isoformat()}.jpg"
         response_payload['pending_log'] = pending_log
 
     return response_payload, 200

@@ -55,6 +55,7 @@ class Config:
         )
 
     GROQ_API_KEY = os.getenv('GROQ_API_KEY', '')
+    API_BASE_URL = os.getenv('API_BASE_URL', '').strip()
     FRONTEND_ORIGIN = _parse_origins.__func__(os.getenv(
         'FRONTEND_ORIGIN',
         'http://localhost:3000,https://fitlife-frontend.onrender.com,https://fit-life-frontend.vercel.app'
