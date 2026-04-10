@@ -90,12 +90,11 @@ def _exercise_score(exercise, categories, muscles, profile_level_limit):
     return score
 
 
-def _select_exercises(profile, plan_day, limit=5):
+def _select_exercises(profile, plan_day, exercise_pool, limit=5):
     categories = _normalize(plan_day['categories'])
     muscles = _normalize(plan_day['muscles'])
     profile_level_limit = PROFILE_LEVEL_LIMIT.get(profile.activity_level, 2)
-    exercises = ExerciseLibrary.query.limit(1400).all()
-    ranked = sorted(exercises, key=lambda item: _exercise_score(item, categories, muscles, profile_level_limit), reverse=True)
+    ranked = sorted(exercise_pool, key=lambda item: _exercise_score(item, categories, muscles, profile_level_limit), reverse=True)
     selected = []
     seen_names = set()
     for exercise in ranked:
@@ -213,13 +212,19 @@ def generate_profile_workout_plan(profile):
     estimator = estimate_goal_timeline(profile)
     track = GOAL_TRACKS.get(profile.fitness_goal, GOAL_TRACKS['maintenance'])
     active_days_target = estimator['active_days_target']
+    exercise_pool = ExerciseLibrary.query.limit(1400).all()
     days = []
 
     for index, plan_day in enumerate(track):
         if index >= active_days_target and plan_day['day'] != 'Sun':
             days.append(_build_rest_day(plan_day))
             continue
-        selected = _select_exercises(profile, plan_day, limit=4 if plan_day['style'] in {'recovery', 'mobility'} else 5)
+        selected = _select_exercises(
+            profile,
+            plan_day,
+            exercise_pool,
+            limit=4 if plan_day['style'] in {'recovery', 'mobility'} else 5
+        )
         if not selected:
             days.append(_build_rest_day(plan_day))
             continue
