@@ -155,9 +155,9 @@ def get_plan(user_id: int):
     if not profile:
         return jsonify({"status": "error", "message": "Please create your health profile first"}), 404
 
-        generated_plan = generate_profile_workout_plan(profile)
-        generated_plan['active_session'] = _active_session_payload(user_id)
-        return jsonify(generated_plan), 200
+    generated_plan = generate_profile_workout_plan(profile)
+    generated_plan['active_session'] = _active_session_payload(user_id)
+    return jsonify(generated_plan), 200
 
 
 def save_plan(user_id: int, data: dict):
