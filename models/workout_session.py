@@ -27,6 +27,26 @@ class WorkoutSession(db.Model):
         exercises = (self.plan_snapshot or {}).get('exercises', [])
         current_index = min(self.current_exercise_index or 0, max(len(exercises) - 1, 0))
         current_exercise = exercises[current_index] if exercises else None
+        completed_entries = self.completed_exercises or []
+
+        def _exercise_index(entry):
+            return int(entry.get('exercise_index', entry.get('index', -1)))
+
+        completed_for_current = []
+        if current_exercise:
+            completed_for_current = [entry for entry in completed_entries if _exercise_index(entry) == current_index]
+
+        total_sets = 1
+        if current_exercise:
+            timer_config = current_exercise.get('timer_config') or {}
+            total_sets = max(
+                int(current_exercise.get('total_sets') or 0),
+                int(current_exercise.get('sets') or 0),
+                int(timer_config.get('total_sets') or 0),
+                1
+            )
+        current_set_index = min(len(completed_for_current), max(total_sets - 1, 0))
+        current_set_number = min(len(completed_for_current) + 1, total_sets)
 
         return {
             'id': self.id,
@@ -35,10 +55,17 @@ class WorkoutSession(db.Model):
             'goal': self.goal,
             'session_title': self.session_title,
             'current_exercise_index': self.current_exercise_index or 0,
+            'current_set_index': current_set_index,
+            'current_set_number': current_set_number,
+            'total_sets_current_exercise': total_sets,
             'current_exercise': current_exercise,
-            'completed_exercises': self.completed_exercises or [],
+            'completed_exercises': completed_entries,
             'total_duration_seconds': self.total_duration_seconds or 0,
             'total_calories_burned': float(self.total_calories_burned or 0),
+            'timer_signal': {
+                'sound_cue': 'beep',
+                'supports_device_sound': True
+            },
             'plan_snapshot': self.plan_snapshot or {},
             'started_at': self.started_at.isoformat() if self.started_at else None,
             'completed_at': self.completed_at.isoformat() if self.completed_at else None

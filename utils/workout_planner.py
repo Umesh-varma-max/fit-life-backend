@@ -144,12 +144,15 @@ def _prescribe_exercise(exercise, style, goal):
         'exercise_id': exercise.external_id,
         'name': exercise.name,
         'sets': sets,
+        'total_sets': sets,
         'reps': reps,
         'duration_seconds': duration_seconds,
+        'set_duration_seconds': duration_seconds,
         'rest_seconds': rest_seconds,
         'duration_min': round(estimated_duration_seconds / 60),
         'estimated_duration_min': round(estimated_duration_seconds / 60),
         'estimated_calories_burn': estimated_calories_burn,
+        'estimated_calories_per_set': round(estimated_calories_burn / max(sets, 1), 1),
         'muscle_group': ', '.join((exercise.primary_muscles or [])[:2]) or exercise.category or 'full body',
         'description': instructions[0] if instructions else f'{exercise.name} for {exercise.category or "general fitness"}.',
         'instructions': instructions[:4],
@@ -166,7 +169,16 @@ def _prescribe_exercise(exercise, style, goal):
         'video_url': None,
         'demo_media_url': exercise.demo_media_url or exercise.image_url,
         'has_demo_media': bool(exercise.image_url or exercise.demo_media_url),
-        'media_fallback_text': instructions[0] if instructions else 'Follow the written cues for this movement.'
+        'media_fallback_text': instructions[0] if instructions else 'Follow the written cues for this movement.',
+        'timer_config': {
+            'total_sets': sets,
+            'set_duration_seconds': duration_seconds,
+            'rest_seconds': rest_seconds,
+            'auto_reset_each_set': sets > 1,
+            'beep_on_set_complete': True,
+            'beep_on_exercise_complete': True,
+            'sound_cue': 'beep'
+        }
     }
 
 
@@ -181,12 +193,15 @@ def _build_rest_day(plan_day):
         'exercises': [{
             'name': plan_day['title'],
             'sets': 1,
+            'total_sets': 1,
             'reps': 0,
             'duration_seconds': 900,
+            'set_duration_seconds': 900,
             'rest_seconds': 0,
             'duration_min': 15,
             'estimated_duration_min': 15,
             'estimated_calories_burn': 60,
+            'estimated_calories_per_set': 60,
             'muscle_group': 'Recovery',
             'description': 'Light stretching, breathing work, or an easy walk to promote recovery.',
             'instructions': ['Spend 10-15 minutes on easy mobility work.', 'Keep intensity low and let recovery support tomorrow’s session.'],
@@ -203,7 +218,16 @@ def _build_rest_day(plan_day):
             'video_url': None,
             'demo_media_url': None,
             'has_demo_media': False,
-            'media_fallback_text': 'Use this day for mobility and recovery work.'
+            'media_fallback_text': 'Use this day for mobility and recovery work.',
+            'timer_config': {
+                'total_sets': 1,
+                'set_duration_seconds': 900,
+                'rest_seconds': 0,
+                'auto_reset_each_set': False,
+                'beep_on_set_complete': True,
+                'beep_on_exercise_complete': True,
+                'sound_cue': 'beep'
+            }
         }]
     }
 

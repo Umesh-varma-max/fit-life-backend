@@ -6,8 +6,12 @@ class ExerciseSchema(Schema):
     """Validates individual exercise entries within a workout plan."""
     name                     = fields.Str(required=True)
     sets                     = fields.Int(load_default=0, validate=validate.Range(min=0))
+    total_sets               = fields.Int(load_default=0, validate=validate.Range(min=0))
     reps                     = fields.Int(load_default=0, validate=validate.Range(min=0))
     duration_min             = fields.Int(load_default=0, validate=validate.Range(min=0))
+    duration_seconds         = fields.Int(load_default=0, validate=validate.Range(min=0))
+    set_duration_seconds     = fields.Int(load_default=0, validate=validate.Range(min=0))
+    rest_seconds             = fields.Int(load_default=0, validate=validate.Range(min=0))
     posture                  = fields.Str(load_default=None, allow_none=True)
     posture_cues             = fields.List(fields.Str(), load_default=list)
     estimated_duration_min   = fields.Int(load_default=0, validate=validate.Range(min=0))

@@ -4,6 +4,7 @@ from middleware.auth_middleware import jwt_required_custom
 from middleware.validation_middleware import validate_body
 from schemas.workout_schema import WorkoutPlanSchema
 from controllers.workout_controller import (
+    complete_set,
     complete_exercise,
     complete_session,
     get_active_session,
@@ -59,6 +60,13 @@ def workout_session_active(current_user):
 def workout_session_complete_exercise(current_user, session_id):
     data = request.get_json(silent=True) or {}
     return complete_exercise(current_user.id, session_id, data)
+
+
+@workout_bp.route('/session/<int:session_id>/set-complete', methods=['POST'])
+@jwt_required_custom
+def workout_session_complete_set(current_user, session_id):
+    data = request.get_json(silent=True) or {}
+    return complete_set(current_user.id, session_id, data)
 
 
 @workout_bp.route('/session/<int:session_id>/complete', methods=['POST'])
