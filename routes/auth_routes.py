@@ -9,14 +9,14 @@ auth_bp = Blueprint('auth', __name__, url_prefix='/api')
 
 
 @auth_bp.route('/register', methods=['POST'])
-@limiter.limit("10 per hour")
+@limiter.limit("30 per hour;10 per minute")
 @validate_body(RegisterSchema)
 def register(validated_data):
     return register_user(validated_data)
 
 
 @auth_bp.route('/login', methods=['POST'])
-@limiter.limit("20 per hour")
+@limiter.limit("60 per hour;20 per minute")
 @validate_body(LoginSchema)
 def login(validated_data):
     return login_user(validated_data)

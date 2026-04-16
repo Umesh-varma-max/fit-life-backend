@@ -57,7 +57,10 @@ def create_app(config_name=None):
 
     @app.errorhandler(429)
     def rate_limit_exceeded(e):
-        return jsonify({"status": "error", "message": "Rate limit exceeded. Please try again later."}), 429
+        return jsonify({
+            "status": "error",
+            "message": "Too many attempts. Please wait a minute and try again."
+        }), 429
 
     @app.errorhandler(500)
     def internal_error(e):
