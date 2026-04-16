@@ -193,8 +193,20 @@ Response style:
 """.strip()
 
 
+def _normalize_message(message: str) -> str:
+    return " ".join((message or "").strip().lower().split())
+
+
 def _detect_topic(message: str) -> str:
-    msg = message.lower()
+    msg = _normalize_message(message)
+    if any(phrase in msg for phrase in ['meal plan', 'diet plan', 'what should i eat', 'food plan']):
+        return 'breakfast'
+    if any(phrase in msg for phrase in ['workout plan', 'today workout', 'today workout plan', 'exercise plan']):
+        return 'workout'
+    if any(phrase in msg for phrase in ['daily routine', 'routine', 'day plan']):
+        return 'progress'
+    if any(phrase in msg for phrase in ['calories left', 'calorie left', 'remaining calories']):
+        return 'progress'
     if any(word in msg for word in ['breakfast', 'morning']):
         return 'breakfast'
     if any(word in msg for word in ['lunch', 'afternoon']):
@@ -246,6 +258,7 @@ def _fallback_response(message: str, context: dict, topic: str, provider: str):
     today = context.get('today') or {}
     meal_plan = recommendation.get('diet_plan') or {}
     daily_calories = recommendation.get('daily_calories') or (profile.daily_calories if profile else None) or 2000
+    message_text = _normalize_message(message)
 
     if not profile:
         reply = (
@@ -253,6 +266,91 @@ def _fallback_response(message: str, context: dict, topic: str, provider: str):
             "Complete age, height, weight, activity level, and goal so I can personalize calories and workouts."
         )
         return _build_response(reply, provider, topic)
+
+    bmi_text = ''
+    if profile.bmi is not None:
+        bmi_text = f"Your BMI is {float(profile.bmi):.1f} ({get_bmi_category(float(profile.bmi))}). "
+    body_fat_text = ''
+    if getattr(profile, 'body_fat_percentage', None) is not None:
+        body_fat_text = f"Body fat is about {float(profile.body_fat_percentage):.1f}% ({profile.body_fat_category}). "
+
+    if topic == 'breakfast':
+        if 'meal plan' in message_text or 'diet plan' in message_text:
+            reply = (
+                f"{bmi_text}{body_fat_text}Here is a simple meal flow for today: "
+                f"breakfast can be {_meal_text(meal_plan.get('breakfast'), 'oats, eggs, fruit, or curd with nuts')}, "
+                f"lunch can be {_meal_text(meal_plan.get('lunch'), 'roti or rice with vegetables and lean protein')}, "
+                f"snack can be {_meal_text(meal_plan.get('snack'), 'fruit, yogurt, or roasted chana')}, "
+                f"and dinner can be {_meal_text(meal_plan.get('dinner'), 'a lighter protein-and-vegetable meal')}."
+            )
+        else:
+            reply = (
+                f"{bmi_text}{body_fat_text}For breakfast, go with {_meal_text(meal_plan.get('breakfast'), 'oats, eggs, fruit, or curd with nuts')}. "
+                f"Keep it protein-focused so you stay fuller and more consistent with your {profile.fitness_goal.replace('_', ' ')} goal."
+            )
+    elif topic == 'lunch':
+        reply = (
+            f"{bmi_text}A good lunch for you is {_meal_text(meal_plan.get('lunch'), 'roti or rice with vegetables and a lean protein')}. "
+            "Aim for a balanced plate instead of a heavy carb-only meal."
+        )
+    elif topic == 'dinner':
+        reply = (
+            f"{bmi_text}Dinner should stay controlled and recovery-friendly. "
+            f"Try {_meal_text(meal_plan.get('dinner'), 'paneer/chicken, vegetables, and a light carb portion')}."
+        )
+    elif topic == 'snack':
+        reply = (
+            f"{bmi_text}For snacks, choose {_meal_text(meal_plan.get('snack'), 'fruit, yogurt, roasted chana, or nuts in moderation')}. "
+            "That fits your calorie target much better than random packaged snacks."
+        )
+    elif topic == 'workout':
+        eta = workout_plan.get('goal_eta_weeks')
+        reply = (
+            f"{bmi_text}{body_fat_text}Your current plan is {workout_plan.get('goal_label', 'an adaptive workout plan')}. "
+            f"Estimated goal period is about {eta} weeks. {_format_today_workout(workout_plan)}"
+        )
+    elif topic == 'progress':
+        if 'daily routine' in message_text or 'routine' in message_text:
+            reply = (
+                f"{bmi_text}A good routine for you is: start with a protein-based breakfast, keep lunch balanced, "
+                f"do {workout_plan.get('today_plan', {}).get('plan_name', 'your scheduled workout')} at the planned time, "
+                f"target about {daily_calories} kcal for the day, drink 2500-3000 ml water, and aim for 7-8 hours of sleep."
+            )
+        elif 'calories left' in message_text or 'remaining calories' in message_text:
+            remaining = max(int(daily_calories) - int(today.get('calories_in', 0)), 0)
+            reply = (
+                f"You have about {remaining} kcal left for today based on a target of {daily_calories} kcal and intake of {today.get('calories_in', 0)} kcal. "
+                "Keep the rest of the day lighter and protein-focused if you want to stay on track."
+            )
+        else:
+            reply = (
+                f"{bmi_text}Today you've eaten about {today.get('calories_in', 0)} kcal and burned about {today.get('calories_out', 0)} kcal. "
+                f"You are targeting roughly {daily_calories} kcal/day, and you've trained {context.get('week', {}).get('workout_count', 0)} time(s) in the last 7 days."
+            )
+    elif topic == 'hydration':
+        reply = (
+            f"You've logged {today.get('water_ml', 0)} ml of water today. "
+            "A practical target is 2500-3000 ml per day, and a simple win is 500 ml after waking, 500 ml around training, and steady sipping with meals."
+        )
+    elif topic == 'recovery':
+        reply = (
+            f"You've logged {today.get('sleep_hours', 0)} hours of sleep today. "
+            "For better recovery and body composition, aim for 7-8 hours, keep one lighter recovery day each week, and do not stack hard sessions when sleep is poor."
+        )
+    elif topic == 'body_metrics':
+        reply = (
+            f"{bmi_text}{body_fat_text}"
+            f"Your plan is tuned for {profile.fitness_goal.replace('_', ' ')}, and the app currently estimates about {workout_plan.get('goal_eta_weeks', 'N/A')} weeks to move toward your next milestone."
+        )
+    else:
+        reply = (
+            f"{bmi_text}{body_fat_text}Your current target is about {daily_calories} kcal/day. "
+            f"Today's workout focus is {workout_plan.get('today_plan', {}).get('plan_name', 'not loaded yet')}. "
+            "Ask me for breakfast, workout, calories left, hydration, sleep, or progress and I'll answer from your live app data."
+        )
+
+    return _build_response(reply, provider, topic)
+
 
     bmi_text = ''
     if profile.bmi is not None:
