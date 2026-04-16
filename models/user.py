@@ -12,6 +12,8 @@ class User(db.Model):
     email         = db.Column(db.String(150), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
     role          = db.Column(db.Enum('user', 'admin', name='user_role'), default='user')
+    token_version = db.Column(db.Integer, nullable=False, default=0, server_default='0')
+    last_login_at = db.Column(db.DateTime, nullable=True)
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at    = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

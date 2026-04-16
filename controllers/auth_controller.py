@@ -1,5 +1,6 @@
 # controllers/auth_controller.py
 from flask import jsonify
+from datetime import datetime
 from extensions import db, bcrypt
 from flask_jwt_extended import create_access_token
 from models.user import User
@@ -17,7 +18,8 @@ def register_user(data: dict):
     user = User(
         full_name=data['full_name'].strip(),
         email=email,
-        password_hash=hashed
+        password_hash=hashed,
+        token_version=0
     )
     db.session.add(user)
     db.session.commit()
@@ -39,6 +41,8 @@ def login_user(data: dict):
 
     # Flask-JWT-Extended stores the identity in the JWT subject claim.
     # Using a string here avoids follow-up auth failures in newer JWT stacks.
+    user.last_login_at = datetime.utcnow()
+    db.session.commit()
     token = create_access_token(identity=str(user.id))
     return jsonify({
         "status": "success",
