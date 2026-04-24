@@ -45,22 +45,8 @@ def seed_for_user(user_email: str):
     if not user:
         raise SystemExit(f"User not found: {user_email}")
 
-    latest_breakfast = (
-        ActivityLog.query.filter(
-            ActivityLog.user_id == user.id,
-            ActivityLog.log_type == "meal",
-            ActivityLog.description.ilike("%breakfast%"),
-        )
-        .order_by(ActivityLog.log_date.desc(), ActivityLog.created_at.desc())
-        .first()
-    )
-
-    start_date = (latest_breakfast.log_date + timedelta(days=1)) if latest_breakfast else (date.today() - timedelta(days=6))
     end_date = date.today()
-
-    if start_date > end_date:
-        print(f"No breakfast scan seeding needed for {user_email}; latest breakfast already covers {end_date}.")
-        return
+    start_date = end_date
 
     inserted = 0
     current = start_date
